@@ -13,37 +13,29 @@ const inventoryproductsSchema = mongoose.Schema({
         type: String,
         required: true,
     },
-    price: {
+    category: {
+        type: String,
+        required: true,
+      },
+      price: {
         type: Number,
         required: true,
-    },
-    year: {
-        type: String,
-    }, 
-    cutting: {
-        type: String,
-    }, 
-    grade: {
-        type: String, 
-    },
-    region: {
-        type: String, 
-    },
-    color: {
-        type: String, 
-    },
-    leaf: {
-        type: String, 
-    },
-    bleach: {
-        type: String, 
-    },
-    texture: {
-        type: String,
-    },
-    stemSize: {
-        type: String, 
-    },
+      },
+      stock: {
+        type: Number,
+        required: true,
+      },
+      review: [
+        {
+          email: { type: String, unique: true },
+          rating: { type: Number },
+          comments: { type: String },
+        },
+      ],
+      createdDate: {
+        type: Date,
+        default: Date.now(),
+      },
 });
 
 const InventoryroductModal = mongoose.model("inventory-product", inventoryproductsSchema);
