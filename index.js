@@ -32,8 +32,12 @@ const FooterCMS = require("./models/CMS/FooterCMS");
 const LogoCMS = require("./models/CMS/LogoCMS");
 const Tax = require("./models/AdminModel/TaxModel");
 const GenaralSetting = require("./models/General Setting/GeneralSettingModel");
-const { FeaturedpoductModal } = require("./models/ClientModel/FeaturedProducts");
-const { InventoryroductModal } = require("./models/ClientModel/InventoryProduct");
+const {
+  FeaturedpoductModal,
+} = require("./models/ClientModel/FeaturedProducts");
+const {
+  InventoryroductModal,
+} = require("./models/ClientModel/InventoryProduct");
 const server = express();
 server.use(express.json());
 server.use(cors());
@@ -210,6 +214,15 @@ server.post("/products", async (req, res) => {
       price,
       stock,
       review,
+      year,
+      cutting,
+      grade,
+      region,
+      color,
+      leaf,
+      bleach,
+      texture,
+      steamSize,
     });
     // Save the package to the database
     await newPackage.save();
@@ -1412,17 +1425,16 @@ server.delete("/wishlist/:id", async (req, res) => {
   }
 });
 
-
-
-
-
 //Inventory SECTION
 server.post("/inv-products", async (req, res) => {
   const {
     image,
     title,
     description,
+    category,
     price,
+    stock,
+    review,
     year,
     cutting,
     grade,
@@ -1440,7 +1452,10 @@ server.post("/inv-products", async (req, res) => {
       image,
       title,
       description,
+      category,
       price,
+      stock,
+      review,
       year,
       cutting,
       grade,
@@ -1500,8 +1515,26 @@ server.delete("/inv-products/:id", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+// UPDATE product by ID
+server.put("/inv-products/:id", async (req, res) => {
+  const productId = req.params.id;
+  const updateData = req.body;
 
-
+  try {
+    const updatedProduct = await FeaturedpoductModal.findByIdAndUpdate(
+      productId,
+      updateData,
+      { new: true }
+    );
+    if (!updatedProduct) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+    res.json({ message: "Product updated successfully", updatedProduct });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 //Featured SECTION
 server.post("/feature-products", async (req, res) => {
@@ -1509,7 +1542,10 @@ server.post("/feature-products", async (req, res) => {
     image,
     title,
     description,
+    category,
     price,
+    stock,
+    review,
     year,
     cutting,
     grade,
@@ -1527,7 +1563,10 @@ server.post("/feature-products", async (req, res) => {
       image,
       title,
       description,
+      category,
       price,
+      stock,
+      review,
       year,
       cutting,
       grade,
@@ -1587,10 +1626,26 @@ server.delete("/feature-products/:id", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+// UPDATE product by ID
+server.put("/feature-products/:id", async (req, res) => {
+  const productId = req.params.id;
+  const updateData = req.body;
 
-
-
-
+  try {
+    const updatedProduct = await FeaturedpoductModal.findByIdAndUpdate(
+      productId,
+      updateData,
+      { new: true }
+    );
+    if (!updatedProduct) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+    res.json({ message: "Product updated successfully", updatedProduct });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 //SERVER
 //server running
