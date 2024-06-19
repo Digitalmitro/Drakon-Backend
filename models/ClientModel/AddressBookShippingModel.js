@@ -7,7 +7,7 @@ const addressbookshippingSchema = new mongoose.Schema({
     shippingstreetAddress: { type: String },
     shippingcity: { type: String },
     shippingstate: { type: String },
-    shippingzipcode: { type: String, required: true },
+    shippingzipcode: { type: Number, required: true },
     shippingphone: { type: Number, required: true },
     user_id: {
         type: mongoose.Schema.Types.ObjectId,

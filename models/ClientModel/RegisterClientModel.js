@@ -25,12 +25,16 @@ const registerclientSchema = mongoose.Schema({
   lastActive: {
     type: String,
   },
-  addressbookbilling: [
-    { type: mongoose.Schema.Types.ObjectId, ref: "addressbookbilling" },
-  ],
-  addressbookShipping: [
-    { type: mongoose.Schema.Types.ObjectId, ref: "addressbookShipping" },
-  ],
+  addressbookbilling: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "addressbookbilling",
+  },
+
+  addressbookShipping: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "addressbookShipping",
+  },
+
   accountdetail: { type: mongoose.Schema.Types.ObjectId, ref: "accountdetail" },
   order: [{ type: mongoose.Schema.Types.ObjectId, ref: "order" }],
   wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "wishlist" }],

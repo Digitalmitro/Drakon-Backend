@@ -1,6 +1,7 @@
 const express = require("express");
 const nodemailer = require("nodemailer");
 const twilio = require("twilio");
+const bodyParser = require('body-parser');
 // const bodyParser = require('body-parser');
 //to protect user data//
 const {
@@ -32,16 +33,12 @@ const FooterCMS = require("./models/CMS/FooterCMS");
 const LogoCMS = require("./models/CMS/LogoCMS");
 const Tax = require("./models/AdminModel/TaxModel");
 const GenaralSetting = require("./models/General Setting/GeneralSettingModel");
-const {
-  FeaturedpoductModal,
-} = require("./models/ClientModel/FeaturedProducts");
-const {
-  InventoryroductModal,
-} = require("./models/ClientModel/InventoryProduct");
+const { FeaturedpoductModal } = require("./models/ClientModel/FeaturedProducts");
+const { InventoryroductModal } = require("./models/ClientModel/InventoryProduct");
 const server = express();
 server.use(express.json());
 server.use(cors());
-
+server.use(bodyParser.json());
 //welcome
 server.get("/", (req, res) => {
   res.send("welcome");
@@ -214,15 +211,6 @@ server.post("/products", async (req, res) => {
       price,
       stock,
       review,
-      year,
-      cutting,
-      grade,
-      region,
-      color,
-      leaf,
-      bleach,
-      texture,
-      steamSize,
     });
     // Save the package to the database
     await newPackage.save();
@@ -1057,29 +1045,52 @@ server.post("/addressbookbilling", async (req, res) => {
   } = req.body;
 
   try {
+    const existingPackage = await AddressbookBillingModel.findOne({ user_id });
     // Create a new instance of AdvisorpackageModel
-    const newPackage = new AddressbookBillingModel({
-      billingfirstName,
-      billinglastName,
-      billingcountry,
-      billingstreetAddress,
-      billingcity,
-      billingstate,
-      billingzipcode,
-      billingphone,
-      billingemail,
-      user_id,
-    });
+    if(!existingPackage){
+      const newPackage = new AddressbookBillingModel({
+        billingfirstName,
+        billinglastName,
+        billingcountry,
+        billingstreetAddress,
+        billingcity,
+        billingstate,
+        billingzipcode,
+        billingphone,
+        billingemail,
+        user_id,
+      });
+  
+      // Save the package to the database
+      await newPackage.save();
+  
+      // Update the user's packages array
+      await RegisterclientModal.findByIdAndUpdate(
+        user_id,
+        { $push: { addressbookbilling: newPackage._id } },
+        { new: true }
+      );
+    }else{
+     
 
-    // Save the package to the database
-    await newPackage.save();
-
-    // Update the user's packages array
-    await RegisterclientModal.findByIdAndUpdate(
-      user_id,
-      { $push: { addressbookbilling: newPackage._id } },
-      { new: true }
-    );
+      await AddressbookBillingModel.findOneAndUpdate(
+        { user_id },
+        {
+          billingfirstName,
+          billinglastName,
+          billingcountry,
+          billingstreetAddress,
+          billingcity,
+          billingstate,
+          billingzipcode,
+          billingphone,
+          billingemail,
+         
+        },
+        { new: true }
+      );
+    }
+   
 
     // Send a success response
     res.send("Billing Address Created");
@@ -1102,6 +1113,9 @@ server.post("/addressbookshipping", async (req, res) => {
   } = req.body;
 
   try {
+    const existingPackage = await AddressBookShippingModel.findOne({ user_id });
+
+    if(!existingPackage){
     // Create a new instance of AdvisorpackageModel
     const newPackage = new AddressBookShippingModel({
       shippingfirstName,
@@ -1124,9 +1138,24 @@ server.post("/addressbookshipping", async (req, res) => {
       { $push: { addressbookShipping: newPackage._id } },
       { new: true }
     );
-
+  }else{
+    await AddressBookShippingModel.findOneAndUpdate(
+      { user_id },
+      {
+        shippingfirstName,
+        shippinglastName,
+        shippingcountry,
+        shippingstreetAddress,
+        shippingcity,
+        shippingstate,
+        shippingzipcode,
+        shippingphone,
+      },
+      { new: true }
+    );
+  }
     // Send a success response
-    res.send("Shipping Address Created");
+    res.send("Shipping Address Created/updated");
   } catch (error) {
     console.log(error);
     res.status(500).send("Internal Server Error");
@@ -1425,25 +1454,20 @@ server.delete("/wishlist/:id", async (req, res) => {
   }
 });
 
+
+
+
+
 //Inventory SECTION
 server.post("/inv-products", async (req, res) => {
   const {
     image,
     title,
     description,
-    category,
     price,
+    category,
     stock,
-    review,
-    year,
-    cutting,
-    grade,
-    region,
-    color,
-    leaf,
-    bleach,
-    texture,
-    steamSize,
+   review
   } = req.body;
 
   try {
@@ -1452,19 +1476,10 @@ server.post("/inv-products", async (req, res) => {
       image,
       title,
       description,
-      category,
       price,
+      category,
       stock,
-      review,
-      year,
-      cutting,
-      grade,
-      region,
-      color,
-      leaf,
-      bleach,
-      texture,
-      steamSize,
+      review
     });
     // Save the package to the database
     await newPackage.save();
@@ -1515,13 +1530,13 @@ server.delete("/inv-products/:id", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
-// UPDATE product by ID
+
 server.put("/inv-products/:id", async (req, res) => {
   const productId = req.params.id;
   const updateData = req.body;
 
   try {
-    const updatedProduct = await FeaturedpoductModal.findByIdAndUpdate(
+    const updatedProduct = await InventoryroductModal.findByIdAndUpdate(
       productId,
       updateData,
       { new: true }
@@ -1529,7 +1544,7 @@ server.put("/inv-products/:id", async (req, res) => {
     if (!updatedProduct) {
       return res.status(404).json({ error: "Product not found" });
     }
-    res.json({ message: "Product updated successfully", updatedProduct });
+    res.json({ message: " inventory updated successfully", updatedProduct });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
@@ -1545,7 +1560,6 @@ server.post("/feature-products", async (req, res) => {
     category,
     price,
     stock,
-    review,
     year,
     cutting,
     grade,
@@ -1566,7 +1580,6 @@ server.post("/feature-products", async (req, res) => {
       category,
       price,
       stock,
-      review,
       year,
       cutting,
       grade,
@@ -1626,7 +1639,8 @@ server.delete("/feature-products/:id", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
-// UPDATE product by ID
+
+
 server.put("/feature-products/:id", async (req, res) => {
   const productId = req.params.id;
   const updateData = req.body;
@@ -1640,12 +1654,13 @@ server.put("/feature-products/:id", async (req, res) => {
     if (!updatedProduct) {
       return res.status(404).json({ error: "Product not found" });
     }
-    res.json({ message: "Product updated successfully", updatedProduct });
+    res.json({ message: " inventory updated successfully", updatedProduct });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 //SERVER
 //server running

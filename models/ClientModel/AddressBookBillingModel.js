@@ -7,7 +7,7 @@ const addressbookBillingSchema = new mongoose.Schema({
   billingstreetAddress: { type: String },
   billingcity: { type: String },
   billingstate: { type: String },
-  billingzipcode: { type: String, required: true },
+  billingzipcode: { type: Number, required: true },
   billingphone: { type: Number, required: true },
   billingemail: { type: String },
   user_id: {

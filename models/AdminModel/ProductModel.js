@@ -29,7 +29,7 @@ const productsSchema = mongoose.Schema({
   },
   review: [
     {
-      email: { type: String, unique: true },
+      email: { type: String },
       rating: { type: Number },
       comments: { type: String },
     },
