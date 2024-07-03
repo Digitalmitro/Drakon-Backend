@@ -21,7 +21,6 @@ const registeradminSchema = mongoose.Schema({
     type: String,
   },
   coupon: [{ type: mongoose.Schema.Types.ObjectId, ref: "coupon" }],
-
   FooterCMS: { type: mongoose.Schema.Types.ObjectId, ref: "FooterCMS" },
   LogoCMS: { type: mongoose.Schema.Types.ObjectId, ref: "LogoCMS" },
   Tax: { type: mongoose.Schema.Types.ObjectId, ref: "Tax" },

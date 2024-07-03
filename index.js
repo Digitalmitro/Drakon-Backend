@@ -1,7 +1,7 @@
 const express = require("express");
 const nodemailer = require("nodemailer");
 const twilio = require("twilio");
-const bodyParser = require('body-parser');
+const bodyParser = require("body-parser");
 // const bodyParser = require('body-parser');
 //to protect user data//
 const {
@@ -18,6 +18,7 @@ const {
   AccountdetailModel,
 } = require("./models/ClientModel/AccountDetailsModel");
 const { OrderModal } = require("./models/ClientModel/OrdersModel");
+const { MessageModel } = require("./models/ClientModel/MessageModel");
 const { WishlistModal } = require("./models/ClientModel/WishlistModel");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
@@ -33,8 +34,12 @@ const FooterCMS = require("./models/CMS/FooterCMS");
 const LogoCMS = require("./models/CMS/LogoCMS");
 const Tax = require("./models/AdminModel/TaxModel");
 const GenaralSetting = require("./models/General Setting/GeneralSettingModel");
-const { FeaturedpoductModal } = require("./models/ClientModel/FeaturedProducts");
-const { InventoryroductModal } = require("./models/ClientModel/InventoryProduct");
+const {
+  FeaturedpoductModal,
+} = require("./models/ClientModel/FeaturedProducts");
+const {
+  InventoryroductModal,
+} = require("./models/ClientModel/InventoryProduct");
 const server = express();
 server.use(express.json());
 server.use(cors());
@@ -49,6 +54,7 @@ const accountSid = "ACbbdc16ced05d3d2fa4d8a7fe2b014147"; // Your Twilio Account 
 const authToken = "6b8cfb5183fc475f58ecc0e0b895aa2b"; // Your Twilio Auth Token
 const twilioPhoneNumber = "+18288275476"; // Your Twilio phone number
 const client = twilio(accountSid, authToken);
+
 server.post("/send-sms", (req, res) => {
   const { to, body } = req.body;
 
@@ -56,8 +62,7 @@ server.post("/send-sms", (req, res) => {
     return res.status(400).send('Both "to" and "body" are required.');
   }
 
-  client.messages
-    .create({
+  client.messages .create({
       body,
       from: twilioPhoneNumber,
       to,
@@ -71,7 +76,7 @@ server.post("/send-sms", (req, res) => {
     });
 });
 
-//Gmail sent
+// Gmail sent
 server.post("/send-email", async (req, res) => {
   const { to, subject, text } = req.body;
 
@@ -101,6 +106,61 @@ server.post("/send-email", async (req, res) => {
     res.status(500).json({ message: "Error sending email" });
   }
 });
+
+server.post("/message", async (req, res) => {
+  const { name, email, message, date, status, user_id } = req.body;
+
+  try {
+    // Create a new instance of investor packageModel
+    const newPackage = new MessageModel({
+      name,
+      email,
+      message,
+      date,
+      status,
+      user_id,
+    });
+
+    // Save the package to the database
+    await newPackage.save();
+
+    // Update the user's packages array
+    await RegisterclientModal.findByIdAndUpdate(
+      user_id,
+      { $push: { message: newPackage._id } },
+      { new: true }
+    );
+
+    // Send a success response
+    res.send(" message Created ");
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+// All message
+server.get("/message", async (req, res) => {
+  try {
+    const data = await MessageModel.find();
+    res.send(data);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+// message by ID
+server.get("/message/:id", async (req, res) => {
+  const ID = req.params.id;
+  try {
+    const data = await MessageModel.findById(ID);
+    res.send(data);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+
 
 //ADMIN Section
 // ADMIN  Register//
@@ -1047,7 +1107,7 @@ server.post("/addressbookbilling", async (req, res) => {
   try {
     const existingPackage = await AddressbookBillingModel.findOne({ user_id });
     // Create a new instance of AdvisorpackageModel
-    if(!existingPackage){
+    if (!existingPackage) {
       const newPackage = new AddressbookBillingModel({
         billingfirstName,
         billinglastName,
@@ -1060,19 +1120,17 @@ server.post("/addressbookbilling", async (req, res) => {
         billingemail,
         user_id,
       });
-  
+
       // Save the package to the database
       await newPackage.save();
-  
+
       // Update the user's packages array
       await RegisterclientModal.findByIdAndUpdate(
         user_id,
         { $push: { addressbookbilling: newPackage._id } },
         { new: true }
       );
-    }else{
-     
-
+    } else {
       await AddressbookBillingModel.findOneAndUpdate(
         { user_id },
         {
@@ -1085,12 +1143,10 @@ server.post("/addressbookbilling", async (req, res) => {
           billingzipcode,
           billingphone,
           billingemail,
-         
         },
         { new: true }
       );
     }
-   
 
     // Send a success response
     res.send("Billing Address Created");
@@ -1115,33 +1171,9 @@ server.post("/addressbookshipping", async (req, res) => {
   try {
     const existingPackage = await AddressBookShippingModel.findOne({ user_id });
 
-    if(!existingPackage){
-    // Create a new instance of AdvisorpackageModel
-    const newPackage = new AddressBookShippingModel({
-      shippingfirstName,
-      shippinglastName,
-      shippingcountry,
-      shippingstreetAddress,
-      shippingcity,
-      shippingstate,
-      shippingzipcode,
-      shippingphone,
-      user_id,
-    });
-
-    // Save the package to the database
-    await newPackage.save();
-
-    // Update the user's packages array
-    await RegisterclientModal.findByIdAndUpdate(
-      user_id,
-      { $push: { addressbookShipping: newPackage._id } },
-      { new: true }
-    );
-  }else{
-    await AddressBookShippingModel.findOneAndUpdate(
-      { user_id },
-      {
+    if (!existingPackage) {
+      // Create a new instance of AdvisorpackageModel
+      const newPackage = new AddressBookShippingModel({
         shippingfirstName,
         shippinglastName,
         shippingcountry,
@@ -1150,10 +1182,34 @@ server.post("/addressbookshipping", async (req, res) => {
         shippingstate,
         shippingzipcode,
         shippingphone,
-      },
-      { new: true }
-    );
-  }
+        user_id,
+      });
+
+      // Save the package to the database
+      await newPackage.save();
+
+      // Update the user's packages array
+      await RegisterclientModal.findByIdAndUpdate(
+        user_id,
+        { $push: { addressbookShipping: newPackage._id } },
+        { new: true }
+      );
+    } else {
+      await AddressBookShippingModel.findOneAndUpdate(
+        { user_id },
+        {
+          shippingfirstName,
+          shippinglastName,
+          shippingcountry,
+          shippingstreetAddress,
+          shippingcity,
+          shippingstate,
+          shippingzipcode,
+          shippingphone,
+        },
+        { new: true }
+      );
+    }
     // Send a success response
     res.send("Shipping Address Created/updated");
   } catch (error) {
@@ -1454,21 +1510,10 @@ server.delete("/wishlist/:id", async (req, res) => {
   }
 });
 
-
-
-
-
 //Inventory SECTION
 server.post("/inv-products", async (req, res) => {
-  const {
-    image,
-    title,
-    description,
-    price,
-    category,
-    stock,
-   review
-  } = req.body;
+  const { image, title, description, price, category, stock, review } =
+    req.body;
 
   try {
     // Create a new instance of AdvisorpackageModel
@@ -1479,7 +1524,7 @@ server.post("/inv-products", async (req, res) => {
       price,
       category,
       stock,
-      review
+      review,
     });
     // Save the package to the database
     await newPackage.save();
@@ -1640,7 +1685,6 @@ server.delete("/feature-products/:id", async (req, res) => {
   }
 });
 
-
 server.put("/feature-products/:id", async (req, res) => {
   const productId = req.params.id;
   const updateData = req.body;
@@ -1660,7 +1704,6 @@ server.put("/feature-products/:id", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
-
 
 //SERVER
 //server running
