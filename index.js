@@ -12,12 +12,14 @@ const {
 } = require("./models/ClientModel/RegisterClientModel");
 const { ProductsModal } = require("./models/AdminModel/ProductModel");
 const { CouponModel } = require("./models/AdminModel/CouponModel");
+const { SubscribedModel } = require("./models/AdminModel/subsrcibedModel");
 const IndexCMS = require("./models/CMS/IndexCMS");
 const { AllordersModel } = require("./models/AdminModel/AllOrdersModel");
 const {
   AccountdetailModel,
 } = require("./models/ClientModel/AccountDetailsModel");
 const { OrderModal } = require("./models/ClientModel/OrdersModel");
+
 const { MessageModel } = require("./models/ClientModel/MessageModel");
 const { WishlistModal } = require("./models/ClientModel/WishlistModel");
 const cors = require("cors");
@@ -106,6 +108,32 @@ server.post("/send-email", async (req, res) => {
     res.status(500).json({ message: "Error sending email" });
   }
 });
+
+server.post('/subscribe', async(req, res)=>{
+  const {email} = req.body
+
+  try{
+  const newPackage = new SubscribedModel({
+    email
+  });
+  await newPackage.save();
+  res.send(" user subscribed");
+}catch (error) {
+    console.log(error);
+    res.status(500).send("Internal Server Error");
+  }
+})
+
+server.get('/subscribe', async(req,res) => {
+  try{
+  const data = await SubscribedModel.find()
+  res.send(data);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Internal Server Error");
+  }
+})
+
 
 server.post("/message", async (req, res) => {
   const { name, email, message, date, status, user_id } = req.body;
