@@ -36,7 +36,7 @@ const registerclientSchema = mongoose.Schema({
   },
 
   accountdetail: { type: mongoose.Schema.Types.ObjectId, ref: "accountdetail" },
-  message: { type: mongoose.Schema.Types.ObjectId, ref: "message" },
+  message:[{ type: mongoose.Schema.Types.ObjectId, ref: "message" }],
   order: [{ type: mongoose.Schema.Types.ObjectId, ref: "order" }],
   wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "wishlist" }],
 });

@@ -1,3 +1,5 @@
+//admin ---      process.env.REACT_APP_BACKEND_API
+// client ---   import.meta.env.VITE_BACKEND_API
 const express = require("express");
 const nodemailer = require("nodemailer");
 const twilio = require("twilio");
@@ -134,7 +136,6 @@ server.get('/subscribe', async(req,res) => {
   }
 })
 
-
 server.post("/message", async (req, res) => {
   const { name, email, message, date, status, user_id } = req.body;
 
@@ -166,6 +167,7 @@ server.post("/message", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
+
 // All message
 server.get("/message", async (req, res) => {
   try {
@@ -176,6 +178,7 @@ server.get("/message", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
+
 // message by ID
 server.get("/message/:id", async (req, res) => {
   const ID = req.params.id;
@@ -187,8 +190,6 @@ server.get("/message/:id", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
-
-
 
 //ADMIN Section
 // ADMIN  Register//
@@ -230,7 +231,8 @@ server.post("/registeradmin", async (req, res) => {
     console.log(error);
     res.status(500).send("Internal Server Error");
   }
-});
+})
+
 //ADMIN Login
 server.post("/loginadmin", async (req, res) => {
   const { email, password } = req.body;
@@ -324,6 +326,8 @@ server.post("/products/batch", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
+
+
 // GET all products
 server.get("/products", async (req, res) => {
   try {
@@ -334,7 +338,8 @@ server.get("/products", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
-// GET Product by product by ID
+
+// GET product by ID
 server.get("/products/:id", async (req, res) => {
   const productId = req.params.id;
 
@@ -461,8 +466,23 @@ server.get("/coupon", async (req, res) => {
     res.send(error);
   }
 });
+
+server.get("/coupon/:id", async (req, res) => {
+  const couponID = req.params.id;
+
+  try {
+    const product = await CouponModel.findById(couponID);
+    if (!product) {
+      return res.status(404).json({ error: "coupon not found" });
+    }
+    res.json(product);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 //UPDATE Current coupon
-server.put("/updatecoupon/:id", async (req, res) => {
+server.put("/coupon/:id", async (req, res) => {
   const couponId = req.params.id;
   const { couponName, discount, limit, expiryDate, status } = req.body;
   try {
@@ -1744,3 +1764,85 @@ server.listen(3500, async () => {
   }
   console.log(`server running at port 3500`);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
