@@ -1,7 +1,5 @@
 const mongoose = require("mongoose");
-
-const connect = mongoose.connect(
-  `mongodb+srv://Tirtho:Tirtho@cluster0.4etk1hs.mongodb.net/DRAKON-Backend?retryWrites=true&w=majority`
-);
+require('dotenv').config()
+const connect = mongoose.connect(process.env.mongo_url);
 
 module.exports = { connect };
