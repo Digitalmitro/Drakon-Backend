@@ -44,6 +44,9 @@ const {
 const {
   InventoryroductModal,
 } = require("./models/ClientModel/InventoryProduct");
+
+require('dotenv').config()
+
 const server = express();
 server.use(express.json());
 server.use(cors());
@@ -52,6 +55,9 @@ server.use(bodyParser.json());
 server.get("/", (req, res) => {
   res.send("welcome");
 });
+
+port = process.env.port
+secret_key = process.env.secret_key
 
 //sent sms - useing twillio
 const accountSid = "ACbbdc16ced05d3d2fa4d8a7fe2b014147"; // Your Twilio Account SID
@@ -249,7 +255,7 @@ server.post("/loginadmin", async (req, res) => {
               phone: user.phone,
               role: user.role,
             },
-            "Tirtho"
+           secret_key
           );
           res.json({
             status: "login successful",
@@ -311,6 +317,26 @@ server.post("/products", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
+
+//product-filter query props
+
+server.get('/products-filters', async (req, res) => {
+  const { category } = req.query;
+  try {
+    let products;
+    if (category) {
+      products = await ProductsModal.find({ category: category });
+    } else {
+      products = await ProductsModal.find();
+    }
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
+});
+
+
+
 //INSERT MANY
 server.post("/products/batch", async (req, res) => {
   const products = req.body;
@@ -988,7 +1014,7 @@ server.post("/loginclient", async (req, res) => {
               email: user.email,
               phone: user.phone,
             },
-            "Tirtho"
+          secret_key
           );
           res.json({
             status: "login successful",
@@ -1755,14 +1781,14 @@ server.put("/feature-products/:id", async (req, res) => {
 
 //SERVER
 //server running
-server.listen(3500, async () => {
+server.listen(port, async () => {
   try {
     await connect;
     console.log("mongoDb connected");
   } catch (error) {
     console.log(error);
   }
-  console.log(`server running at port 3500`);
+  console.log(`server running at port `, port);
 });
 
 
