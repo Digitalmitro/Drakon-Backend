@@ -1,5 +1,6 @@
 //admin ---      process.env.REACT_APP_BACKEND_API
 // client ---   import.meta.env.VITE_BACKEND_API
+require("dotenv").config();
 const express = require("express");
 const nodemailer = require("nodemailer");
 const twilio = require("twilio");
@@ -51,13 +52,20 @@ const server = express();
 server.use(express.json());
 server.use(cors());
 server.use(bodyParser.json());
+
+
+require("./config/db");
+// const connection = require("./config/db");
+
+// connection();
+
 //welcome
 server.get("/", (req, res) => {
   res.send("welcome");
 });
 
-port = process.env.port
-secret_key = process.env.secret_key
+const port = process.env.port
+ const secret_key = process.env.secret_key
 
 //sent sms - useing twillio
 const accountSid = "ACbbdc16ced05d3d2fa4d8a7fe2b014147"; // Your Twilio Account SID
@@ -72,7 +80,8 @@ server.post("/send-sms", (req, res) => {
     return res.status(400).send('Both "to" and "body" are required.');
   }
 
-  client.messages .create({
+  client.messages
+    .create({
       body,
       from: twilioPhoneNumber,
       to,
@@ -117,30 +126,30 @@ server.post("/send-email", async (req, res) => {
   }
 });
 
-server.post('/subscribe', async(req, res)=>{
-  const {email} = req.body
+server.post("/subscribe", async (req, res) => {
+  const { email } = req.body;
 
-  try{
-  const newPackage = new SubscribedModel({
-    email
-  });
-  await newPackage.save();
-  res.send(" user subscribed");
-}catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-})
-
-server.get('/subscribe', async(req,res) => {
-  try{
-  const data = await SubscribedModel.find()
-  res.send(data);
+  try {
+    const newPackage = new SubscribedModel({
+      email,
+    });
+    await newPackage.save();
+    res.send(" user subscribed");
   } catch (error) {
     console.log(error);
     res.status(500).send("Internal Server Error");
   }
-})
+});
+
+server.get("/subscribe", async (req, res) => {
+  try {
+    const data = await SubscribedModel.find();
+    res.send(data);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
 server.post("/message", async (req, res) => {
   const { name, email, message, date, status, user_id } = req.body;
@@ -237,7 +246,7 @@ server.post("/registeradmin", async (req, res) => {
     console.log(error);
     res.status(500).send("Internal Server Error");
   }
-})
+});
 
 //ADMIN Login
 server.post("/loginadmin", async (req, res) => {
@@ -353,11 +362,21 @@ server.post("/products/batch", async (req, res) => {
   }
 });
 
-
 // GET all products
 server.get("/products", async (req, res) => {
   try {
     const products = await ProductsModal.find();
+    res.send(products);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+server.get("/products-by-category/:category", async (req, res) => {
+  try {
+    const category = req.params.category;
+    const products = await ProductsModal.find({ category });
     res.send(products);
   } catch (error) {
     console.error(error);
@@ -1788,87 +1807,5 @@ server.listen(port, async () => {
   } catch (error) {
     console.log(error);
   }
-  console.log(`server running at port `, port);
+  console.log(`server running at port 3500`);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
