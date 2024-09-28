@@ -48,6 +48,8 @@ const {
 
 require('dotenv').config()
 
+const Port = process.env.port;
+
 const server = express();
 server.use(express.json());
 server.use(cors());
@@ -55,9 +57,11 @@ server.use(bodyParser.json());
 
 
 require("./config/db");
-// const connection = require("./config/db");
+const connection = require("./config/db");
+const adminAuth = require("./models/middlewares/adminAuth");
 
-// connection();
+connection();
+
 
 //welcome
 server.get("/", (req, res) => {
@@ -334,6 +338,16 @@ server.post("/loginadmin", async (req, res) => {
     res
       .status(500)
       .json({ message: "Invalid login credentials", success: false });
+  }
+});
+
+// Check Token API
+server.get("/check-admin-token", adminAuth, async (req, res) => {
+  try {
+    // If the middleware passed, the token is valid
+    res.status(200).json({ message: "Token is valid" });
+  } catch (error) {
+    res.status(500).json({ error: "Unable to verify token" });
   }
 });
 
@@ -1846,12 +1860,10 @@ server.put("/feature-products/:id", async (req, res) => {
 
 //SERVER
 //server running
-server.listen(port, async () => {
+server.listen(Port, async () => {
   try {
-    await connect;
-    console.log("mongoDb connected");
+    console.log(`server running at port ${Port}`);
   } catch (error) {
     console.log(error);
   }
-  console.log(`server running at port 3500`);
 });
