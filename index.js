@@ -207,11 +207,11 @@ server.post("/registeradmin", async (req, res) => {
 
   try {
     // Check if the email already exists in the database
-    const existingAdvisor = await RegisteradminModal.findOne({ email });
+    const existingAdvisor = await RegisteradminModal.findOne();
 
     if (existingAdvisor) {
       // If email already exists, send an error response
-      res.status(400).send("Email already exists");
+      res.status(400).send("Admin already exists");
     } else {
       // Hash the password
       bcrypt.hash(password, 5, async (err, hash) => {
@@ -243,48 +243,94 @@ server.post("/registeradmin", async (req, res) => {
 });
 
 //ADMIN Login
-server.post("/loginadmin", async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await RegisteradminModal.findOne({ email });
-    if (user) {
-      bcrypt.compare(password, user.password, (err, result) => {
-        if (result) {
-          const token = jwt.sign(
-            {
-              _id: user._id,
-              name: user.name,
-              email: user.email,
-              phone: user.phone,
-              role: user.role,
-            },
-            "Tirtho"
-          );
-          res.json({
-            status: "login successful",
-            token: token,
-            user: {
-              name: user.name,
-              email: user.email,
-              phone: user.phone,
-              role: user.role,
-              _id: user._id,
+// server.post("/loginadmin", async (req, res) => {
+//   const { email, password } = req.body;
+//   try {
+//     const user = await RegisteradminModal.findOne({ email });
+//     if (user) {
+//       bcrypt.compare(password, user.password, (err, result) => {
+//         if (result) {
+//           const token = jwt.sign(
+//             {
+//               _id: user._id,
+//               name: user.name,
+//               email: user.email,
+//               phone: user.phone,
+//               role: user.role,
+//             },
+//             "Tirtho"
+//           );
+//           res.json({
+//             status: "login successful",
+//             token: token,
+//             user: {
+//               name: user.name,
+//               email: user.email,
+//               phone: user.phone,
+//               role: user.role,
+//               _id: user._id,
 
-              // Add other user details if needed
-            },
-          });
-        } else {
-          res.status(401).json({ status: "wrong entry" });
-        }
-      });
+//               // Add other user details if needed
+//             },
+//           });
+//         } else {
+//           res.status(401).json({ status: "wrong entry" });
+//         }
+//       });
+//     } else {
+//       res.status(404).json({ status: "user not found" });
+//     }
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ status: "internal server error" });
+//   }
+// });
+
+server.post("/loginadmin", async (req, res) => {
+  try {
+    const logEmail = req.body.email;
+    const logPass = req.body.password;
+
+    if (!logEmail || !logPass) {
+      return res
+        .status(422)
+        .json({ message: "Please fill all the fields.", success: false });
+    }
+
+    const adminFound = await RegisteradminModal.findOne({ email: logEmail });
+
+    console.log(adminFound);
+
+    if (adminFound) {
+      const passCheck = await bcrypt.compare(logPass, adminFound.password);
+      const token = await adminFound.generateAuthToken();
+
+      if (passCheck) {
+        res.status(200).json({
+          message: "Logged In Successfully!",
+          token: token,
+          success: true,
+          Admin: {
+            id: adminFound._id,
+            name: adminFound.name,
+            email: adminFound.email,
+          },
+        });
+      } else {
+        res
+          .status(400)
+          .json({ message: "Invalid login credentials", success: false });
+      }
     } else {
-      res.status(404).json({ status: "user not found" });
+      res.status(422).json({ message: "Admin Not Found !", success: false });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ status: "internal server error" });
+    res
+      .status(500)
+      .json({ message: "Invalid login credentials", success: false });
   }
 });
+
 // GET all ADMIN
 server.get("/getalladmin", async (req, res) => {
   try {
