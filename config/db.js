@@ -1,6 +1,13 @@
 const mongoose = require("mongoose");
-require('dotenv').config()
-console.log(process.env.mongo_url)
-const connect = mongoose.connect(process.env.mongo_url);
 
-module.exports = { connect };
+module.exports = async function connection (){
+  try{
+    await mongoose.connect(process.env.MONGO_URI).then(() => {
+      console.log("Connection Successful.");
+    })
+  }catch(e){
+    console.log("Connection UnSuccessful.");
+    console.log(e);
+  }
+}
+
