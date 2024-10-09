@@ -1727,8 +1727,8 @@ server.get("/specific-order/:id", async (req, res) => {
 
 //Wishlist Section For Client
 // Create Wishlist Client populate
-server.post("/wishlist", async (req, res) => {
-  const { image, title, price, qty, product_id, user_id } = req.body;
+server.post("/wishlist", userAuth, async (req, res) => {
+  const { image, title, price, qty, product_id } = req.body;
 
   try {
     // Create a new instance of AdvisorpackageModel
@@ -1738,7 +1738,7 @@ server.post("/wishlist", async (req, res) => {
       price,
       qty,
       product_id,
-      user_id,
+      user_id: req.rootUser._id,
     });
 
     // Save the package to the database
@@ -1746,7 +1746,7 @@ server.post("/wishlist", async (req, res) => {
 
     // Update the user's packages array
     await RegisterclientModal.findByIdAndUpdate(
-      user_id,
+      req.rootUser._id,
       { $push: { wishlist: newPackage._id } },
       { new: true }
     );
@@ -1758,11 +1758,46 @@ server.post("/wishlist", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
-//Populate Order for client
-server.get("/wishlist/:id", async (req, res) => {
-  const { id } = req.params;
+
+// Get User's Cart
+server.get("/get-user-cart", userAuth, async (req, res) => {
+  const userId = req.rootUser._id; // Assume user ID is retrieved from token using middleware
   try {
-    const data = await RegisterclientModal.findById(id).populate("wishlist");
+    // Fetch the user's cart (wishlist) based on their user ID
+    const userCart = await WishlistModal.find({ user_id: userId });
+
+    // Check if the cart exists
+    if (!userCart || userCart.length === 0) {
+      return res.status(404).json({ message: "Cart is empty" });
+    }
+
+    // Group products by product_id and sum quantities
+    const groupedCart = userCart.reduce((acc, item) => {
+      const existingItem = acc.find(cartItem => cartItem.product_id === item.product_id);
+      if (existingItem) {
+        existingItem.qty += item.qty; // Combine the quantities if the product already exists
+      } else {
+        acc.push({ ...item.toObject() }); // Push a new item if not present
+      }
+      return acc;
+    }, []);
+
+    // Return the cart data
+    res.status(200).json({
+      success: true,
+      cart: groupedCart,
+    });
+  } catch (error) {
+    console.error("Error fetching user's cart:", error);
+    res.status(500).json({ message: "Server error, please try again later." });
+  }
+});
+
+
+//Populate Order for client
+server.get("/wishlist/:id", userAuth, async (req, res) => {
+  try {
+    const data = await RegisterclientModal.findOne({user_id: req.rootUser._id}).populate("wishlist");
     res.send(data);
   } catch (error) {
     console.log(error);
