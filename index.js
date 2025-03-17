@@ -1,3 +1,4 @@
+
 //admin ---      process.env.REACT_APP_BACKEND_API
 // client ---   import.meta.env.VITE_BACKEND_API
 require("dotenv").config();
@@ -54,8 +55,7 @@ const server = express();
 server.use(express.json());
 server.use(cors());
 server.use(bodyParser.json());
-
-require("./config/db");
+// require("./config/db");
 const connection = require("./config/db");
 const adminAuth = require("./models/middlewares/adminAuth");
 const userAuth = require("./models/middlewares/userAuth");
@@ -216,7 +216,7 @@ server.post("/registeradmin", async (req, res) => {
 
   try {
     // Check if the email already exists in the database
-    const existingAdvisor = await RegisteradminModal.findOne();
+    const existingAdvisor = await RegisteradminModal.findOne({email});
 
     if (existingAdvisor) {
       // If email already exists, send an error response
@@ -308,7 +308,7 @@ server.post("/loginadmin", async (req, res) => {
 
     const adminFound = await RegisteradminModal.findOne({ email: logEmail });
 
-    console.log(adminFound);
+    // console.log(adminFound);
 
     if (adminFound) {
       const passCheck = await bcrypt.compare(logPass, adminFound.password);
