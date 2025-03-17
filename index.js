@@ -474,23 +474,33 @@ server.delete("/products/:id", async (req, res) => {
 // UPDATE product by ID
 server.put("/products/:id", async (req, res) => {
   const productId = req.params.id;
-  const updateData = req.body;
+  const { image, ...updateData } = req.body; // Extract images separately
 
   try {
+    const updateQuery = { ...updateData };
+
+    // If new images are provided, push them to the array
+    if (image) {
+      updateQuery.$push = { image: { $each: image } }; // Append new images
+    }
+
     const updatedProduct = await ProductsModal.findByIdAndUpdate(
       productId,
-      updateData,
+      updateQuery,
       { new: true }
     );
+
     if (!updatedProduct) {
       return res.status(404).json({ error: "Product not found" });
     }
+
     res.json({ message: "Product updated successfully", updatedProduct });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 // GET product review by ID
 server.get("/product-review/:id", async (req, res) => {
   const productId = req.params.id;
