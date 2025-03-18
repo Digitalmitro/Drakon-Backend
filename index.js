@@ -1045,13 +1045,11 @@ server.get("/logo", async (req, res) => {
 //Client Section
 // Client  Register//
 server.post("/registerclient", async (req, res) => {
-  const { email, password, firstname, lastname, username } = req.body;
+  const { email, password, name} = req.body;
 
   try {
     // Check if the email already exists in the database
-    const existingAdvisor = await RegisterclientModal.findOne({
-      $or: [{ email: email }, { displayName: username }],
-    });
+    const existingAdvisor = await RegisterclientModal.findOne({ email: email });
 
     const registerDate = new Date();
 
@@ -1059,11 +1057,13 @@ server.post("/registerclient", async (req, res) => {
       // If email already exists, send an error response
       return res.status(400).send("User already exists");
     }
+    const firstname=name.split(" ")[0];
+    const lastname = name.split(" ")[1]
     // Create a new instance of RegisteradvisorModal with the hashed password
     const newData = new RegisterclientModal({
       firstName: firstname,
       lastName: lastname,
-      displayName: username,
+      displayName: name,
       password,
       email,
       registerDate,
