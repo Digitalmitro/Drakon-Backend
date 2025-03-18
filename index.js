@@ -59,7 +59,7 @@ server.use(bodyParser.json());
 const connection = require("./config/db");
 const adminAuth = require("./models/middlewares/adminAuth");
 const userAuth = require("./models/middlewares/userAuth");
-
+const bannerRoutes = require("./routes/bannerRoutes")
 connection();
 
 //welcome
@@ -1280,6 +1280,40 @@ server.get("/getclients", async (req, res) => {
   }
 });
 
+//reset password
+server.put("/reset-password",userAuth, async(req,res)=>{
+  try {
+    const { oldPassword, newPassword } = req.body;
+    const userId = req.rootUser._id;
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
+
+    // Find user
+    const user = await RegisterclientModal.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Compare old password
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: "Old password is incorrect" });
+    }
+
+    // Hash new password
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+})
+
 //Account Details Section From Client
 // Create Account Details Client populate
 server.post("/account-details-client", async (req, res) => {
@@ -2021,6 +2055,8 @@ server.put("/feature-products/:id", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+//new mvc routes
+server.use("/api", bannerRoutes);
 
 //SERVER
 //server running
