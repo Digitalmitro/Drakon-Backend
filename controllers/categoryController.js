@@ -29,7 +29,12 @@ exports.createCategory = async (req, res) => {
 // Get All Categories
 exports.getCategories = async (req, res) => {
   try {
-    const categories = await Category.find();
+    const { categoryName } = req.query;
+    let query = {};
+    if (categoryName) {
+      query.categoryName = categoryName; // Case-insensitive search
+    }
+    const categories = await Category.find(query);
     res.json(categories);
   } catch (error) {
     res.status(500).json({ error: "Internal Server Error" });
