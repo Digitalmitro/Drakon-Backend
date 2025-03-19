@@ -59,7 +59,8 @@ server.use(bodyParser.json());
 const connection = require("./config/db");
 const adminAuth = require("./models/middlewares/adminAuth");
 const userAuth = require("./models/middlewares/userAuth");
-const bannerRoutes = require("./routes/bannerRoutes")
+const bannerRoutes = require("./routes/bannerRoutes");
+const categoryRoutes = require("./routes/categoryRoutes");
 connection();
 
 //welcome
@@ -2057,6 +2058,8 @@ server.put("/feature-products/:id", async (req, res) => {
 });
 //new mvc routes
 server.use("/api", bannerRoutes);
+server.use("/api",categoryRoutes);
+
 
 //SERVER
 //server running
