@@ -2056,6 +2056,21 @@ server.put("/feature-products/:id", async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+// GET Products by Category with Limit
+server.get("/products/category/:category", async (req, res) => {
+  try {
+    const { category } = req.params;
+    const limit = parseInt(req.query.limit) || 10; // Default limit to 10 if not provided
+    const products = await FeaturedpoductModal.find({ category }).limit(limit);
+    if (!products.length) {
+      return res.status(404).json({ message: "No products found in this category" });
+    }
+    res.status(200).json(products);
+  } catch (error) {
+    console.error("Error fetching products:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 //new mvc routes
 server.use("/api", bannerRoutes);
 server.use("/api",categoryRoutes);
