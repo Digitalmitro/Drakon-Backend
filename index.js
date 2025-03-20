@@ -442,6 +442,7 @@ server.get("/products", async (req, res) => {
   }
 });
 
+
 // GET all products
 server.get("/allproducts", async (req, res) => {
   try {
@@ -2071,15 +2072,23 @@ server.delete("/feature-products/:id", async (req, res) => {
 });
 
 server.put("/feature-products/:id", async (req, res) => {
-  const productId = req.params.id;
-  const updateData = req.body;
+ const productId = req.params.id;
+  const { image, ...updateData } = req.body; // Extract images separately
 
   try {
+    const updateQuery = { ...updateData };
+
+    // If new images are provided, push them to the array
+    if (image) {
+      updateQuery.$push = { image: { $each: image } }; // Append new images
+    }
+
     const updatedProduct = await FeaturedpoductModal.findByIdAndUpdate(
       productId,
-      updateData,
+      updateQuery,
       { new: true }
     );
+
     if (!updatedProduct) {
       return res.status(404).json({ error: "Product not found" });
     }
