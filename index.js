@@ -427,11 +427,11 @@ server.get("/products", async (req, res) => {
   try {
     const { category } = req.query;
     const limit = parseInt(req.query.limit) || 10;
-    let query = {};
-    if (category) {
-      query.category = category; 
+ 
+    if (!category) {
+      return res.status(401).json({message:"not provide category"})
     }
-    const products = await FeaturedpoductModal.find(query).limit(limit);
+    const products = await FeaturedpoductModal.find({category:category}).limit(limit);
 
     if (!products.length) {
       return res.status(404).json({ message: "No products found in this category" });
