@@ -456,6 +456,27 @@ server.get("/allproducts", async (req, res) => {
   }
 });
 
+server.get("/top-products",async(req,res)=>{
+  try {
+    const categories = await FeaturedpoductModal.distinct("category"); // Get unique categories
+    let topProducts = [];
+
+    for (const category of categories) {
+      const latestProduct = await FeaturedpoductModal.findOne({ category })
+        .sort({ createdDate: -1 }) // Get latest product
+        .limit(1);
+
+      if (latestProduct) {
+        topProducts.push(latestProduct);
+      }
+    }
+
+    res.status(200).json(topProducts);
+  } catch (error) {
+    console.error("Error fetching top products:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+})
 // GET product by ID
 server.get("/products/:id", async (req, res) => {
   const productId = req.params.id;
