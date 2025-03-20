@@ -482,7 +482,7 @@ server.get("/products/:id", async (req, res) => {
   const productId = req.params.id;
 
   try {
-    const product = await ProductsModal.findById(productId);
+    const product = await FeaturedpoductModal.findById(productId);
     if (!product) {
       return res.status(404).json({ error: "Product not found" });
     }
