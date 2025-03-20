@@ -46,6 +46,8 @@ const {
 const {
   InventoryroductModal,
 } = require("./models/ClientModel/InventoryProduct");
+const topCategoryRoutes = require("./routes/topCategoryRoutes");
+
 
 require("dotenv").config();
 
@@ -420,25 +422,37 @@ server.post("/products/batch", async (req, res) => {
   }
 });
 
-// GET all products
+
 server.get("/products", async (req, res) => {
   try {
-    const products = await ProductsModal.find();
-    res.send(products);
+    const { category } = req.query;
+    const limit = parseInt(req.query.limit) || 10;
+    let query = {};
+    if (category) {
+      query.category = category; 
+    }
+    const products = await FeaturedpoductModal.find(query).limit(limit);
+
+    if (!products.length) {
+      return res.status(404).json({ message: "No products found in this category" });
+    }
+
+    res.status(200).json(products);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("Error fetching products:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-server.get("/products-by-category/:category", async (req, res) => {
+// GET all products
+server.get("/allproducts", async (req, res) => {
   try {
-    const category = req.params.category;
-    const products = await ProductsModal.find({ category });
-    res.send(products);
+    const limit = parseInt(req.query.limit) || 20; // Default limit: 20
+    const products = await FeaturedpoductModal.find().limit(limit);
+    res.status(200).json(products);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("Error fetching products:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -2074,7 +2088,7 @@ server.get("/products/category/:category", async (req, res) => {
 //new mvc routes
 server.use("/api", bannerRoutes);
 server.use("/api",categoryRoutes);
-
+server.use("/api", topCategoryRoutes);
 
 //SERVER
 //server running
