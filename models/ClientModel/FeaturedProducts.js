@@ -27,13 +27,13 @@ const featuredproductsSchema = mongoose.Schema({
     type: Number,
     required: true,
   },
-  review: [
-    {
-      email: { type: String, unique: true },
-      rating: { type: Number },
-      comments: { type: String },
-    },
-  ],
+  // review: [
+  //   {
+  //     email: { type: String, unique: true },
+  //     rating: { type: Number },
+  //     comments: { type: String },
+  //   },
+  // ],
   createdDate: {
     type: Date,
     default: Date.now(),
