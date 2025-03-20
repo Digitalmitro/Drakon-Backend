@@ -390,7 +390,6 @@ server.post("/products", async (req, res) => {
 });
 
 //product-filter query props
-
 server.get("/products-filters", async (req, res) => {
   const { category } = req.query;
   try {
@@ -421,7 +420,6 @@ server.post("/products/batch", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
-
 
 server.get("/products", async (req, res) => {
   try {
