@@ -3,14 +3,14 @@ const mongoose = require("mongoose");
 const cartSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User", // Reference to the User model
+    ref: "register client", // Reference to the User model
     required: true,
   },
   products: [
     {
       productId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Product", // Reference to the Product model
+        ref: "featured-product", // Reference to the Product model
         required: true,
       },
       quantity: {
@@ -24,13 +24,13 @@ const cartSchema = new mongoose.Schema({
       },
       total: {
         type: Number,
-        required: true,
+      
       },
     },
   ],
   subtotal: {
     type: Number,
-    required: true,
+  
     default: 0,
   },
   shippingCost: {
@@ -43,7 +43,7 @@ const cartSchema = new mongoose.Schema({
   },
   totalAmount: {
     type: Number,
-    required: true,
+   
   },
   createdAt: {
     type: Date,
