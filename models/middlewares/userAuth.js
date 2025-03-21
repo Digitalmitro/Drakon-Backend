@@ -11,7 +11,7 @@ const userAuth = async (req, res, next) => {
       return res.status(401).json({ message: 'Access Denied. No token provided' });
     }
   
-    const token = authHeader.split(' ')[1]; // Extract token after "Bearer"
+    const token = authHeader.split(' ')[1];
   
     const verifyToken =  jwt.verify(token, process.env.secret_key);
     const rootUser = await RegisterclientModal.findOne({ _id: verifyToken._id });
