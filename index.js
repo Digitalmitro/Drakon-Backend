@@ -59,10 +59,12 @@ server.use(cors());
 server.use(bodyParser.json());
 // require("./config/db");
 const connection = require("./config/db");
-const adminAuth = require("./models/middlewares/adminAuth");
-const userAuth = require("./models/middlewares/userAuth");
+const adminAuth = require("./middlewares/adminAuth");
+const userAuth = require("./middlewares/userAuth");
 const bannerRoutes = require("./routes/bannerRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
+const cartRoutes = require("./routes/cartRoutes");
+const orderRoutes = require("./routes/orderRoutes")
 connection();
 
 //welcome
@@ -390,7 +392,6 @@ server.post("/products", async (req, res) => {
 });
 
 //product-filter query props
-
 server.get("/products-filters", async (req, res) => {
   const { category } = req.query;
   try {
@@ -422,7 +423,6 @@ server.post("/products/batch", async (req, res) => {
   }
 });
 
-
 server.get("/products", async (req, res) => {
   try {
     const { category } = req.query;
@@ -443,6 +443,7 @@ server.get("/products", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 // GET all products
 server.get("/allproducts", async (req, res) => {
@@ -1339,7 +1340,7 @@ server.put("/reset-password",userAuth, async(req,res)=>{
     }
 
     // Hash new password
-    user.password = await bcrypt.hash(newPassword, 10);
+    user.password = newPassword;
     await user.save();
 
     res.json({ message: "Password updated successfully" });
@@ -2073,15 +2074,23 @@ server.delete("/feature-products/:id", async (req, res) => {
 });
 
 server.put("/feature-products/:id", async (req, res) => {
-  const productId = req.params.id;
-  const updateData = req.body;
+ const productId = req.params.id;
+  const { image, ...updateData } = req.body; // Extract images separately
 
   try {
+    const updateQuery = { ...updateData };
+
+    // If new images are provided, push them to the array
+    if (image) {
+      updateQuery.$push = { image: { $each: image } }; // Append new images
+    }
+
     const updatedProduct = await FeaturedpoductModal.findByIdAndUpdate(
       productId,
-      updateData,
+      updateQuery,
       { new: true }
     );
+
     if (!updatedProduct) {
       return res.status(404).json({ error: "Product not found" });
     }
@@ -2110,6 +2119,8 @@ server.get("/products/category/:category", async (req, res) => {
 server.use("/api", bannerRoutes);
 server.use("/api",categoryRoutes);
 server.use("/api", topCategoryRoutes);
+server.use("/api", cartRoutes);
+server.use("/api", orderRoutes);
 
 //SERVER
 //server running

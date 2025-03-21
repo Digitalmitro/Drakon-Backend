@@ -6,15 +6,13 @@ const cloudinary = require("../config/cloudinaryConfig");
 exports.createTopCategory = async (req, res) => {
   try {
     const { title, description } = req.body;
-    if (!req.file) return res.status(400).json({ error: "Image is required" });
-
     // Upload Image to Cloudinary
-    const uploadResponse = await cloudinary.uploader.upload(req.file.path);
+    const Image = req.files.image[0].path;
     
     const newCategory = new TopCategory({
       title,
       description,
-      image: uploadResponse.secure_url
+      image: Image
     });
 
     await newCategory.save();
