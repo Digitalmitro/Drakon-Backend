@@ -4,7 +4,8 @@ const Cart = require("../models/Cart");
 // Create Order
 exports.createOrder = async (req, res) => {
   try {
-    const { userId, paymentMethod, shippingAddress } = req.body;
+    const userId  = req.rootUser._id;
+    const { paymentMethod, shippingAddress } = req.body;
     const cart = await Cart.findOne({ userId });
 
     if (!cart || cart.products.length === 0) {
@@ -54,6 +55,16 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
+exports.getOrder = async (req, res) => {
+    try {
+    
+      const order = await Order.find().populate("products.productId", "title price image");
+      if (!order) return res.status(404).json({ message: "Order not found" });
+      res.status(200).json(order);
+    } catch (error) {
+      res.status(500).json({ error: "Server error" });
+    }
+  };
 // Update Order Status (Admin Only)
 exports.updateOrderStatus = async (req, res) => {
   try {
