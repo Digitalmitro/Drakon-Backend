@@ -59,10 +59,12 @@ server.use(cors());
 server.use(bodyParser.json());
 // require("./config/db");
 const connection = require("./config/db");
-const adminAuth = require("./models/middlewares/adminAuth");
-const userAuth = require("./models/middlewares/userAuth");
+const adminAuth = require("./middlewares/adminAuth");
+const userAuth = require("./middlewares/userAuth");
 const bannerRoutes = require("./routes/bannerRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
+const cartRoutes = require("./routes/cartRoutes");
+const orderRoutes = require("./routes/orderRoutes")
 connection();
 
 //welcome
@@ -1338,7 +1340,7 @@ server.put("/reset-password",userAuth, async(req,res)=>{
     }
 
     // Hash new password
-    user.password = await bcrypt.hash(newPassword, 10);
+    user.password = newPassword;
     await user.save();
 
     res.json({ message: "Password updated successfully" });
@@ -2117,6 +2119,8 @@ server.get("/products/category/:category", async (req, res) => {
 server.use("/api", bannerRoutes);
 server.use("/api",categoryRoutes);
 server.use("/api", topCategoryRoutes);
+server.use("/api", cartRoutes);
+server.use("/api", orderRoutes);
 
 //SERVER
 //server running
