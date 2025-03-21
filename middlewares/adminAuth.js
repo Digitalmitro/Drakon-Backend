@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const {
   RegisteradminModal,
-} = require("../AdminModel/RegisterAdminModel");
+} = require("../models/AdminModel/RegisterAdminModel");
 
 const adminAuth = async (req, res, next) => {
   try {
