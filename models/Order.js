@@ -3,14 +3,14 @@ const mongoose = require("mongoose");
 const orderSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    ref: "register client",
     required: true,
   },
   products: [
     {
       productId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Product",
+        ref: "featured-product",
         required: true,
       },
       quantity: {
@@ -30,7 +30,7 @@ const orderSchema = new mongoose.Schema({
   ],
   subtotal: {
     type: Number,
-    required: true,
+    
   },
   shippingCost: {
     type: Number,
@@ -42,7 +42,7 @@ const orderSchema = new mongoose.Schema({
   },
   totalAmount: {
     type: Number,
-    required: true,
+   
   },
   paymentMethod: {
     type: String,
@@ -60,11 +60,11 @@ const orderSchema = new mongoose.Schema({
     default: "Processing",
   },
   shippingAddress: {
-    fullName: { type: String, required: true },
-    address: { type: String, required: true },
-    city: { type: String, required: true },
-    postalCode: { type: String, required: true },
-    country: { type: String, required: true },
+    fullName: { type: String,  },
+    address: { type: String,  },
+    city: { type: String,  },
+    postalCode: { type: String,  },
+    country: { type: String,  },
   },
   createdAt: {
     type: Date,
