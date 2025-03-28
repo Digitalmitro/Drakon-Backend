@@ -64,7 +64,8 @@ const userAuth = require("./middlewares/userAuth");
 const bannerRoutes = require("./routes/bannerRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const cartRoutes = require("./routes/cartRoutes");
-const orderRoutes = require("./routes/orderRoutes")
+const orderRoutes = require("./routes/orderRoutes");
+const stripeRoutes = require("./routes/stripeRoutes");
 connection();
 
 //welcome
@@ -2121,7 +2122,7 @@ server.use("/api",categoryRoutes);
 server.use("/api", topCategoryRoutes);
 server.use("/api", cartRoutes);
 server.use("/api", orderRoutes);
-
+server.use("/api/stripe", stripeRoutes);
 //SERVER
 //server running
 server.listen(Port, async () => {
