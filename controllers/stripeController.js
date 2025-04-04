@@ -1,4 +1,5 @@
 const stripe = require("../config/stripeConfig");
+const Order = require("../models/Order");
 
 exports.createPaymentIntent = async (req, res) => {
         try {
@@ -19,7 +20,7 @@ exports.createPaymentIntent = async (req, res) => {
               },
             ],
             mode: "payment",
-            success_url: "https://h4snptx0-5173.inc1.devtunnels.ms/cart?success=true",
+            success_url: "http://localhost:5173/cart?session_id={CHECKOUT_SESSION_ID}",
             cancel_url: "https://h4snptx0-5173.inc1.devtunnels.ms/cart?canceled=true",
           });
       
@@ -28,3 +29,21 @@ exports.createPaymentIntent = async (req, res) => {
           res.status(500).json({ error: error.message });
         }    
 };
+
+exports.sucessfullPayment = async (req,res) =>{
+  const { sessionId } = req.body;
+  if(!sessionId) return res.status(401).json({message:"unauth"})
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    if (session.payment_status !== "paid") {
+
+      res.status(200).json({ message: "Order Not saved!" });
+    }
+
+    return res.status(200).json({ message: "Payment  successful",session:session.payment_status });
+  } catch (err) {
+    console.error("Error confirming order:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+}

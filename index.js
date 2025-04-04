@@ -2116,6 +2116,24 @@ server.get("/products/category/:category", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+server.get("/user/profile", userAuth, async (req, res) => {
+  try {
+    const user = await RegisterclientModal.findOne({ _id: req.rootUser._id });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const { firstName, lastName, email, phone } = user;
+
+    res.status(200).json({
+      name: `${firstName} ${lastName}`,
+      email,
+      phone,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch user profile", details: err.message });
+  }
+});
+
 //new mvc routes
 server.use("/api", bannerRoutes);
 server.use("/api",categoryRoutes);
