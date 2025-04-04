@@ -20,7 +20,7 @@ exports.createPaymentIntent = async (req, res) => {
               },
             ],
             mode: "payment",
-            success_url: "http://localhost:5173/cart?session_id={CHECKOUT_SESSION_ID}",
+            success_url: "https://drakonui.netlify.app/cart?session_id={CHECKOUT_SESSION_ID}",
             cancel_url: "https://h4snptx0-5173.inc1.devtunnels.ms/cart?canceled=true",
           });
       
