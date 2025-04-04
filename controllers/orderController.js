@@ -1,11 +1,14 @@
 const Order = require("../models/Order");
 const Cart = require("../models/Cart");
 
+const SHIPSTATION_API_KEY = process.env.SHIPSTATION_API_KEY;
+const SHIPSTATION_API_URL = "https://ssapi.shipstation.com/v2/";
+
 // Create Order
 exports.createOrder = async (req, res) => {
   try {
     const userId  = req.rootUser._id;
-    const { paymentMethod, shippingAddress } = req.body;
+    const { paymentMethod, shippingAddress, paymentStatus } = req.body;
     const cart = await Cart.findOne({ userId });
 
     if (!cart || cart.products.length === 0) {
@@ -21,6 +24,7 @@ exports.createOrder = async (req, res) => {
       totalAmount: cart.totalAmount,
       paymentMethod,
       shippingAddress,
+      paymentStatus
     });
 
     await newOrder.save();
@@ -28,9 +32,46 @@ exports.createOrder = async (req, res) => {
 
     res.status(201).json({ message: "Order placed successfully", order: newOrder });
   } catch (error) {
+    console.log(error)
     res.status(500).json({ error: "Server error" });
   }
 };
+
+exports.createShippingOrder = async (req,res) =>{
+  cosole.log("call this function")
+  try {
+    const { orderNumber, orderDate, orderStatus, customerEmail, billTo, shipTo, items } = req.body;
+
+    const orderData = {
+      orderNumber,
+      orderDate,
+      orderStatus,
+      customerEmail,
+      billTo,
+      shipTo,
+      items,
+      carrierCode: "stamps_com", // Change based on your carrier
+      serviceCode: "usps_priority", // Adjust based on shipping type
+      packageCode: "package", // Modify as needed
+      confirmation: "delivery",
+      weight: { value: 2, units: "pounds" },
+      dimensions: { length: 10, width: 5, height: 5, units: "inches" },
+    };
+
+   
+    const response = await axios.post(`${SHIPSTATION_API_URL}/orders/createorder`, orderData, {
+      headers: {
+        "api-key": `${SHIPSTATION_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    res.json({ success: true, message: "Order created successfully in ShipStation", data: response.data });
+  } catch (error) {
+    console.error("ShipStation API Error:", error.response ? error.response.data : error.message);
+    res.status(500).json({ success: false, message: "Failed to create order in ShipStation" });
+  }
+}
 
 // Get User Orders
 exports.getUserOrders = async (req, res) => {
@@ -76,3 +117,4 @@ exports.updateOrderStatus = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
