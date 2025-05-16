@@ -1509,6 +1509,7 @@ server.post("/addressbookbilling", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
+// Create a new shipping address (allows multiples per user)
 server.post("/addressbookshipping", async (req, res) => {
   const {
     shippingfirstName,
@@ -1523,54 +1524,63 @@ server.post("/addressbookshipping", async (req, res) => {
   } = req.body;
 
   try {
-    const existingPackage = await AddressBookShippingModel.findOne({ user_id });
+    // 1️⃣ always create a new AddressBookShippingModel
+    const newAddr = new AddressBookShippingModel({
+      shippingfirstName,
+      shippinglastName,
+      shippingcountry,
+      shippingstreetAddress,
+      shippingcity,
+      shippingstate,
+      shippingzipcode,
+      shippingphone,
+      user_id,
+    });
+    await newAddr.save();
 
-    if (!existingPackage) {
-      // Create a new instance of AdvisorpackageModel
-      const newPackage = new AddressBookShippingModel({
-        shippingfirstName,
-        shippinglastName,
-        shippingcountry,
-        shippingstreetAddress,
-        shippingcity,
-        shippingstate,
-        shippingzipcode,
-        shippingphone,
-        user_id,
-      });
+    // 2️⃣ push the new address _id onto the user's array
+    await RegisterclientModal.findByIdAndUpdate(
+      user_id,
+      { $push: { addressbookShipping: newAddr._id } },
+      { new: true }
+    );
 
-      // Save the package to the database
-      await newPackage.save();
-
-      // Update the user's packages array
-      await RegisterclientModal.findByIdAndUpdate(
-        user_id,
-        { $push: { addressbookShipping: newPackage._id } },
-        { new: true }
-      );
-    } else {
-      await AddressBookShippingModel.findOneAndUpdate(
-        { user_id },
-        {
-          shippingfirstName,
-          shippinglastName,
-          shippingcountry,
-          shippingstreetAddress,
-          shippingcity,
-          shippingstate,
-          shippingzipcode,
-          shippingphone,
-        },
-        { new: true }
-      );
-    }
-    // Send a success response
-    res.send("Shipping Address Created/updated");
+    // 3️⃣ return the new address
+    res.status(201).json(newAddr);
   } catch (error) {
-    console.log(error);
+    console.error("Error in /addressbookshipping:", error);
     res.status(500).send("Internal Server Error");
   }
 });
+
+// Get all shipping addresses for a given user
+server.get("/addressbookshipping/:user_id", async (req, res) => {
+  try {
+    const list = await AddressBookShippingModel.find({
+      user_id: req.params.user_id,
+    });
+    res.json({ addressbookShipping: list });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+// Update a specific shipping address by its ID
+server.put("/addressbookshipping/:id", async (req, res) => {
+  try {
+    const updated = await AddressBookShippingModel.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
 // Client all created Address Book Details
 server.get("/addressbookbilling/:id", async (req, res) => {
   const { id } = req.params;
@@ -1847,6 +1857,7 @@ server.get("/get-user-cart", userAuth, async (req, res) => {
   try {
     // Fetch the user's cart (wishlist) based on their user ID
     const userCart = await WishlistModal.find({ user_id: userId });
+    console.log(userCart)
 
     // Check if the cart exists
     if (!userCart || userCart.length === 0) {
