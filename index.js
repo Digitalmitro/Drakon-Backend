@@ -66,6 +66,7 @@ const categoryRoutes = require("./routes/categoryRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const stripeRoutes = require("./routes/stripeRoutes");
+const { default: axios } = require("axios");
 connection();
 
 //welcome
@@ -75,6 +76,7 @@ server.get("/", (req, res) => {
 
 const port = process.env.port;
 const secret_key = process.env.secret_key;
+
 
 //sent sms - useing twillio
 const accountSid = "ACbbdc16ced05d3d2fa4d8a7fe2b014147"; // Your Twilio Account SID
@@ -1885,6 +1887,65 @@ server.get("/get-user-cart", userAuth, async (req, res) => {
     res.status(500).json({ message: "Server error, please try again later." });
   }
 });
+
+server.post("/shipping/estimate", async (req, res) => {
+  const { to, weightOunces } = req.body;
+  if (!to || typeof weightOunces !== "number") {
+    return res.status(400).json({ error: "Missing or invalid `to` or `weightOunces`" });
+  }
+
+  try {
+    const apiKey = process.env.SS_API_KEY; // your V2 API Key :contentReference[oaicite:1]{index=1}
+
+    // Build the V2 /v2/rates/estimate payload :contentReference[oaicite:2]{index=2}
+    const payload = {
+      carrier_id:   process.env.SS_CARRIER_ID,        // restrict to your connected carrier (optional)
+      from_country_code:  process.env.SS_FROM_COUNTRY,
+      from_postal_code:   process.env.SS_FROM_ZIP,
+      from_city_locality: process.env.SS_FROM_CITY,
+      from_state_province:process.env.SS_FROM_STATE,
+
+      to_country_code:    to.shippingcountry,
+      to_postal_code:     to.shippingzipcode,
+      to_city_locality:   to.shippingcity,
+      to_state_province:  to.shippingstate,
+
+      weight: {
+        value: weightOunces,
+        unit:  "ounce"                              // one of "ounce"|"pound"|"gram"|"kilogram" :contentReference[oaicite:3]{index=3}
+      },
+      confirmation: "none",
+      address_residential_indicator: "no"
+    };
+
+    // Call ShipStation V2 Rates Estimate :contentReference[oaicite:4]{index=4}
+    const shipRes = await axios.post(
+      "https://api.shipstation.com/v2/rates/estimate",
+      payload,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "API-Key":       apiKey
+        }
+      }
+    );
+
+    // Pick the first quote’s shipping_amount.amount :contentReference[oaicite:5]{index=5}
+    const rates = shipRes.data || [];
+    const estimatedCost = rates.length
+      ? rates[0].shipping_amount.amount
+      : 0;
+
+    return res.json({ estimatedCost });
+  }
+  catch (err) {
+    console.error("Rate estimate failed:", err.response?.data || err.message);
+    return res
+      .status(err.response?.status || 500)
+      .json({ error: err.message, details: err.response?.data || [] });
+  }
+});
+
 
 
 //Populate Order for client
