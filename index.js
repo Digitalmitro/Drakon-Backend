@@ -1,4 +1,3 @@
-
 //admin ---      process.env.REACT_APP_BACKEND_API
 // client ---   import.meta.env.VITE_BACKEND_API
 require("dotenv").config();
@@ -47,7 +46,7 @@ const {
   InventoryroductModal,
 } = require("./models/ClientModel/InventoryProduct");
 const topCategoryRoutes = require("./routes/topCategoryRoutes");
-
+const orderController = require('./controllers/orderController')
 
 require("dotenv").config();
 
@@ -76,7 +75,6 @@ server.get("/", (req, res) => {
 
 const port = process.env.port;
 const secret_key = process.env.secret_key;
-
 
 //sent sms - useing twillio
 const accountSid = "ACbbdc16ced05d3d2fa4d8a7fe2b014147"; // Your Twilio Account SID
@@ -224,7 +222,7 @@ server.post("/registeradmin", async (req, res) => {
 
   try {
     // Check if the email already exists in the database
-    const existingAdvisor = await RegisteradminModal.findOne({email});
+    const existingAdvisor = await RegisteradminModal.findOne({ email });
 
     if (existingAdvisor) {
       // If email already exists, send an error response
@@ -430,14 +428,18 @@ server.get("/products", async (req, res) => {
   try {
     const { category } = req.query;
     const limit = parseInt(req.query.limit) || 10;
- 
+
     if (!category) {
-      return res.status(401).json({message:"not provide category"})
+      return res.status(401).json({ message: "not provide category" });
     }
-    const products = await FeaturedpoductModal.find({category:category}).limit(limit);
+    const products = await FeaturedpoductModal.find({
+      category: category,
+    }).limit(limit);
 
     if (!products.length) {
-      return res.status(404).json({ message: "No products found in this category" });
+      return res
+        .status(404)
+        .json({ message: "No products found in this category" });
     }
 
     res.status(200).json(products);
@@ -446,7 +448,6 @@ server.get("/products", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 // GET all products
 server.get("/allproducts", async (req, res) => {
@@ -460,7 +461,7 @@ server.get("/allproducts", async (req, res) => {
   }
 });
 
-server.get("/top-products",async(req,res)=>{
+server.get("/top-products", async (req, res) => {
   try {
     const categories = await FeaturedpoductModal.distinct("category"); // Get unique categories
     let topProducts = [];
@@ -480,7 +481,7 @@ server.get("/top-products",async(req,res)=>{
     console.error("Error fetching top products:", error);
     res.status(500).json({ error: "Internal server error" });
   }
-})
+});
 // GET product by ID
 server.get("/products/:id", async (req, res) => {
   const productId = req.params.id;
@@ -1085,7 +1086,7 @@ server.get("/logo", async (req, res) => {
 //Client Section
 // Client  Register//
 server.post("/registerclient", async (req, res) => {
-  const { email, password, name} = req.body;
+  const { email, password, name } = req.body;
 
   try {
     // Check if the email already exists in the database
@@ -1097,8 +1098,8 @@ server.post("/registerclient", async (req, res) => {
       // If email already exists, send an error response
       return res.status(400).send("User already exists");
     }
-    const firstname=name.split(" ")[0];
-    const lastname = name.split(" ")[1]
+    const firstname = name.split(" ")[0];
+    const lastname = name.split(" ")[1];
     // Create a new instance of RegisteradvisorModal with the hashed password
     const newData = new RegisterclientModal({
       firstName: firstname,
@@ -1321,7 +1322,7 @@ server.get("/getclients", async (req, res) => {
 });
 
 //reset password
-server.put("/reset-password",userAuth, async(req,res)=>{
+server.put("/reset-password", userAuth, async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
     const userId = req.rootUser._id;
@@ -1347,12 +1348,11 @@ server.put("/reset-password",userAuth, async(req,res)=>{
     await user.save();
 
     res.json({ message: "Password updated successfully" });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
   }
-})
+});
 
 //Account Details Section From Client
 // Create Account Details Client populate
@@ -1708,116 +1708,157 @@ server.delete("/addressbookshipping/:id", async (req, res) => {
   }
 });
 
-//Order Section For Client
-// Create Order Client populate
-server.post("/order", async (req, res) => {
-  const {
-    image,
-    title,
-    price,
-    qty,
-    billing,
-    shipping,
-    product_id,
-    user,
-    user_id,
-    ip,
-    createdDate,
-    status,
-    totalpay,
-  } = req.body;
+// //Order Section For Client
+// // Create Order Client populate
+// server.post("/order", async (req, res) => {
+//   const {
+//     image,
+//     title,
+//     price,
+//     qty,
+//     billing,
+//     shipping,
+//     product_id,
+//     user,
+//     user_id,
+//     ip,
+//     createdDate,
+//     status,
+//     totalpay,
+//   } = req.body;
 
-  try {
-    // Create a new instance of AdvisorpackageModel
-    const newPackage = new OrderModal({
-      image,
-      title,
-      price,
-      qty,
-      billing,
-      shipping,
-      product_id,
-      user,
-      user_id,
-      ip,
-      createdDate,
-      status,
-      totalpay,
-    });
+//   try {
+//     // Create a new instance of AdvisorpackageModel
+//     const newPackage = new OrderModal({
+//       image,
+//       title,
+//       price,
+//       qty,
+//       billing,
+//       shipping,
+//       product_id,
+//       user,
+//       user_id,
+//       ip,
+//       createdDate,
+//       status,
+//       totalpay,
+//     });
 
-    // Save the package to the database
-    await newPackage.save();
+//     // Save the package to the database
+//     await newPackage.save();
 
-    // Update the user's packages array
-    await RegisterclientModal.findByIdAndUpdate(
-      user_id,
-      { $push: { order: newPackage._id } },
-      { new: true }
-    );
+//     // Update the user's packages array
+//     await RegisterclientModal.findByIdAndUpdate(
+//       user_id,
+//       { $push: { order: newPackage._id } },
+//       { new: true }
+//     );
 
-    // Send a success response
-    res.send("order placed");
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-//Update order
-server.put("/order/:orderId", async (req, res) => {
-  const orderId = req.params.orderId;
-  const { status } = req.body;
+//     // Send a success response
+//     res.send("order placed");
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).send("Internal Server Error");
+//   }
+// });
+// //Update order
+// server.put("/order/:orderId", async (req, res) => {
+//   const orderId = req.params.orderId;
+//   const { status } = req.body;
 
-  try {
-    // Update the status field in the existing document
-    const updatedOrder = await OrderModal.findByIdAndUpdate(
-      orderId,
-      { $set: { status: status } },
-      { new: true }
-    );
+//   try {
+//     // Update the status field in the existing document
+//     const updatedOrder = await OrderModal.findByIdAndUpdate(
+//       orderId,
+//       { $set: { status: status } },
+//       { new: true }
+//     );
 
-    if (!updatedOrder) {
-      return res.status(404).send("Order not found");
-    }
+//     if (!updatedOrder) {
+//       return res.status(404).send("Order not found");
+//     }
 
-    // Send the updated order as a response
-    res.json(updatedOrder);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-//Populate Order for client
-server.get("/order/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    const data = await RegisterclientModal.findById(id).populate("order");
-    res.send(data);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-// Get all orders
-server.get("/order", async (req, res) => {
-  try {
-    const data = await OrderModal.find();
-    res.send(data);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-// Get order by order id
-server.get("/specific-order/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    const data = await OrderModal.findById(id);
-    res.send(data);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
+//     // Send the updated order as a response
+//     res.json(updatedOrder);
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).send("Internal Server Error");
+//   }
+// });
+// //Populate Order for client
+// server.get("/order/:id", async (req, res) => {
+//   const { id } = req.params;
+//   try {
+//     const data = await RegisterclientModal.findById(id).populate("order");
+//     res.send(data);
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).send("Internal Server Error");
+//   }
+// });
+// // Get all orders
+// server.get("/order", async (req, res) => {
+//   try {
+//     const data = await OrderModal.find();
+//     res.send(data);
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).send("Internal Server Error");
+//   }
+// });
+// // Get order by order id
+// server.get("/specific-order/:id", async (req, res) => {
+//   const { id } = req.params;
+//   try {
+//     const data = await OrderModal.findById(id);
+//     res.send(data);
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).send("Internal Server Error");
+//   }
+// });
+
+// —————————————————————————————————————————————
+// 1. Create a new order (from client/cart)
+// POST /order
+// body: { paymentMethod, shippingAddress, billingAddress?, paymentStatus? }
+// —————————————————————————————————————————————
+server.post("/order", orderController.createOrder);
+
+// —————————————————————————————————————————————
+// 2. Update an order’s status (admin or webhook)
+// PUT /order/:orderId
+// body: { orderStatus }
+// —————————————————————————————————————————————
+server.put("/order/:orderId", orderController.updateOrderStatus);
+
+// —————————————————————————————————————————————
+// 3. Get all orders for a given user
+// GET /order/:id
+// Here “:id” is the user’s ObjectId
+// —————————————————————————————————————————————
+server.get("/order/:id", orderController.getUserOrders);
+
+// —————————————————————————————————————————————
+// 4. Get all orders in the system
+// GET /order
+// —————————————————————————————————————————————
+server.get("/order", orderController.getOrder);
+
+// —————————————————————————————————————————————
+// 5. Get a single order by its orderNumber or _id
+// GET /specific-order/:id
+// —————————————————————————————————————————————
+server.get("/specific-order/:id", orderController.getOrderById);
+
+// —————————————————————————————————————————————
+// 6. (Optional) ShipStation “Custom Store” endpoints
+//    a) Export orders pull:    GET  /shipstation?action=export&…
+//    b) Shipment notification:  POST /shipstation?action=shipnotify
+// —————————————————————————————————————————————
+server.get("/shipstation", orderController.exportOrders);
+server.post("/shipstation", orderController.shipNotify);
 
 //Wishlist Section For Client
 // Create Wishlist Client populate
@@ -1859,7 +1900,7 @@ server.get("/get-user-cart", userAuth, async (req, res) => {
   try {
     // Fetch the user's cart (wishlist) based on their user ID
     const userCart = await WishlistModal.find({ user_id: userId });
-    console.log(userCart)
+    console.log(userCart);
 
     // Check if the cart exists
     if (!userCart || userCart.length === 0) {
@@ -1868,7 +1909,9 @@ server.get("/get-user-cart", userAuth, async (req, res) => {
 
     // Group products by product_id and sum quantities
     const groupedCart = userCart.reduce((acc, item) => {
-      const existingItem = acc.find(cartItem => cartItem.product_id === item.product_id);
+      const existingItem = acc.find(
+        (cartItem) => cartItem.product_id === item.product_id
+      );
       if (existingItem) {
         existingItem.qty += item.qty; // Combine the quantities if the product already exists
       } else {
@@ -1891,7 +1934,9 @@ server.get("/get-user-cart", userAuth, async (req, res) => {
 server.post("/shipping/estimate", async (req, res) => {
   const { to, weightOunces } = req.body;
   if (!to || typeof weightOunces !== "number") {
-    return res.status(400).json({ error: "Missing or invalid `to` or `weightOunces`" });
+    return res
+      .status(400)
+      .json({ error: "Missing or invalid `to` or `weightOunces`" });
   }
 
   try {
@@ -1899,23 +1944,23 @@ server.post("/shipping/estimate", async (req, res) => {
 
     // Build the V2 /v2/rates/estimate payload :contentReference[oaicite:2]{index=2}
     const payload = {
-      carrier_id:   process.env.SS_CARRIER_ID,        // restrict to your connected carrier (optional)
-      from_country_code:  process.env.SS_FROM_COUNTRY,
-      from_postal_code:   process.env.SS_FROM_ZIP,
+      carrier_id: process.env.SS_CARRIER_ID, // restrict to your connected carrier (optional)
+      from_country_code: process.env.SS_FROM_COUNTRY,
+      from_postal_code: process.env.SS_FROM_ZIP,
       from_city_locality: process.env.SS_FROM_CITY,
-      from_state_province:process.env.SS_FROM_STATE,
+      from_state_province: process.env.SS_FROM_STATE,
 
-      to_country_code:    to.shippingcountry,
-      to_postal_code:     to.shippingzipcode,
-      to_city_locality:   to.shippingcity,
-      to_state_province:  to.shippingstate,
+      to_country_code: to.shippingcountry,
+      to_postal_code: to.shippingzipcode,
+      to_city_locality: to.shippingcity,
+      to_state_province: to.shippingstate,
 
       weight: {
         value: weightOunces,
-        unit:  "ounce"                              // one of "ounce"|"pound"|"gram"|"kilogram" :contentReference[oaicite:3]{index=3}
+        unit: "ounce", // one of "ounce"|"pound"|"gram"|"kilogram" :contentReference[oaicite:3]{index=3}
       },
       confirmation: "none",
-      address_residential_indicator: "no"
+      address_residential_indicator: "no",
     };
 
     // Call ShipStation V2 Rates Estimate :contentReference[oaicite:4]{index=4}
@@ -1925,20 +1970,17 @@ server.post("/shipping/estimate", async (req, res) => {
       {
         headers: {
           "Content-Type": "application/json",
-          "API-Key":       apiKey
-        }
+          "API-Key": apiKey,
+        },
       }
     );
 
     // Pick the first quote’s shipping_amount.amount :contentReference[oaicite:5]{index=5}
     const rates = shipRes.data || [];
-    const estimatedCost = rates.length
-      ? rates[0].shipping_amount.amount
-      : 0;
+    const estimatedCost = rates.length ? rates[0].shipping_amount.amount : 0;
 
     return res.json({ estimatedCost });
-  }
-  catch (err) {
+  } catch (err) {
     console.error("Rate estimate failed:", err.response?.data || err.message);
     return res
       .status(err.response?.status || 500)
@@ -1946,12 +1988,12 @@ server.post("/shipping/estimate", async (req, res) => {
   }
 });
 
-
-
 //Populate Order for client
 server.get("/wishlist/:id", userAuth, async (req, res) => {
   try {
-    const data = await RegisterclientModal.findOne({user_id: req.rootUser._id}).populate("wishlist");
+    const data = await RegisterclientModal.findOne({
+      user_id: req.rootUser._id,
+    }).populate("wishlist");
     res.send(data);
   } catch (error) {
     console.log(error);
@@ -2147,7 +2189,7 @@ server.delete("/feature-products/:id", async (req, res) => {
 });
 
 server.put("/feature-products/:id", async (req, res) => {
- const productId = req.params.id;
+  const productId = req.params.id;
   const { image, ...updateData } = req.body; // Extract images separately
 
   try {
@@ -2180,7 +2222,9 @@ server.get("/products/category/:category", async (req, res) => {
     const limit = parseInt(req.query.limit) || 10; // Default limit to 10 if not provided
     const products = await FeaturedpoductModal.find({ category }).limit(limit);
     if (!products.length) {
-      return res.status(404).json({ message: "No products found in this category" });
+      return res
+        .status(404)
+        .json({ message: "No products found in this category" });
     }
     res.status(200).json(products);
   } catch (error) {
@@ -2202,13 +2246,15 @@ server.get("/user/profile", userAuth, async (req, res) => {
       phone,
     });
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch user profile", details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch user profile", details: err.message });
   }
 });
 
 //new mvc routes
 server.use("/api", bannerRoutes);
-server.use("/api",categoryRoutes);
+server.use("/api", categoryRoutes);
 server.use("/api", topCategoryRoutes);
 server.use("/api", cartRoutes);
 server.use("/api", orderRoutes);
