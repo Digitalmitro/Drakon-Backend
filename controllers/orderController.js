@@ -27,46 +27,102 @@ function requireBasicAuth(req, res) {
 // — Create Order (unchanged, but now populates billTo & shipTo) ——
 exports.createOrder = async (req, res) => {
   try {
-    const userId         = req.rootUser._id;
-    const { paymentMethod, shippingAddress, billingAddress, paymentStatus } = req.body;
-    const cart           = await Cart.findOne({ userId });
-    if (!cart || cart.products.length === 0)
-      return res.status(400).json({ message: "Cart is empty" });
+    // 1) Determine if there’s an authenticated user
+    const userIdFromToken = req.rootUser?._id || null;
+    let cartItems, subtotal, shippingCost, discount, totalAmount;
 
-    // Generate orderNumber from new ObjectId
+    if (userIdFromToken) {
+      // ── Authenticated user: look up their Cart in the DB ──
+      const cart = await Cart.findOne({ userId: userIdFromToken });
+      if (!cart || !cart.products || cart.products.length === 0) {
+        return res.status(400).json({ message: "Cart is empty" });
+      }
+      cartItems    = cart.products;
+      subtotal     = cart.subtotal;
+      shippingCost = cart.shippingCost;
+      discount     = cart.discount;
+      totalAmount  = cart.totalAmount;
+    } else {
+      // ── Guest checkout: expect cart data in the request body ──
+      const bodyCart = req.body.cartData;
+      if (!Array.isArray(bodyCart) || bodyCart.length === 0) {
+        return res.status(400).json({ message: "Cart is empty (guest)" });
+      }
+      cartItems    = bodyCart;
+      subtotal     = req.body.subtotal;
+      shippingCost = req.body.shippingCost;
+      discount     = req.body.discount;
+      totalAmount  = req.body.totalAmount;
+
+      // Validate that all those numbers exist
+      if (
+        typeof subtotal !== "number" ||
+        typeof shippingCost !== "number" ||
+        typeof discount !== "number" ||
+        typeof totalAmount !== "number"
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Missing subtotal/shippingCost/discount/totalAmount for guest" });
+      }
+    }
+
+    // 2) Extract the rest of the body fields
+    const {
+      paymentMethod,
+      paymentStatus = "Pending",
+      shippingAddress,
+      billingAddress,
+      customerCode   = ""
+    } = req.body;
+
+    if (!paymentMethod || !shippingAddress) {
+      return res.status(400).json({ message: "Missing required payment or address fields" });
+    }
+
+    // 3) Generate a new unique orderNumber
     const orderNumber = new mongoose.Types.ObjectId().toString();
 
+    // 4) Build the “items” array in the shape our Order schema wants
+    //    (same for both user‐cart and guest‐cart)
+    const itemsForOrder = cartItems.map((p) => ({
+      sku:       p.productId.toString(),
+      name:      p.productTitle,
+      quantity:  p.quantity,
+      unitPrice: p.price,
+      options:   p.options || {},
+      location:  p.location || ""
+    }));
+
+    // 5) Construct the new Order document
     const newOrder = new Order({
       orderNumber,
-      orderDate:    new Date(),
-      userId,
-      customerCode: req.rootUser.email,
-      billTo:       billingAddress || shippingAddress,
-      shipTo:       shippingAddress,
-      items:        cart.products.map(p => ({
-                      sku:       p.productId.toString(),
-                      name:      p.productTitle,
-                      quantity:  p.quantity,
-                      unitPrice: p.price,
-                      options:   p.options || {},
-                      location:  p.location || ""
-                    })),
-      subtotal:     cart.subtotal,
-      shippingAmount: cart.shippingCost,
-      discount:       cart.discount,
-      orderTotal:     cart.totalAmount,
+      orderDate:      new Date(),
+      userId:         userIdFromToken,           // will be null if guest
+      customerCode,                             // allow email or empty string
+      billTo:         billingAddress || shippingAddress,
+      shipTo:         shippingAddress,
+      items:          itemsForOrder,
+      subtotal,
+      shippingAmount: shippingCost,
+      discount,
+      orderTotal:     totalAmount,
       currencyCode:   "USD",
       paymentMethod,
       paymentStatus,
       orderStatus:    "Processing"
     });
 
+    // 6) Save the Order, and if it was a logged‐in user, delete their Cart
     await newOrder.save();
-    await Cart.deleteOne({ userId });
-    res.status(201).json({ message: "Order placed", order: newOrder });
+    if (userIdFromToken) {
+      await Cart.deleteOne({ userId: userIdFromToken });
+    }
+
+    return res.status(201).json({ message: "Order placed", order: newOrder });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Server error" });
   }
 };
 
@@ -148,69 +204,148 @@ exports.updateOrderStatus = async (req, res) => {
 };
 
 exports.exportOrders = async (req, res) => {
+  // 1) Basic authentication
   if (!requireBasicAuth(req, res)) return;
-  if (req.query.action !== "export")
-    return res.status(400).send("Invalid action");
 
+  // 2) Validate action=export
+  if (req.query.action !== "export") {
+    return res.status(400).send("Invalid action");
+  }
+
+  // 3) Parse start/end dates from query
   const { start_date, end_date, page = 1 } = req.query;
+  if (!start_date || !end_date) {
+    return res.status(400).send("Missing start_date or end_date");
+  }
   const start = new Date(start_date);
   const end   = new Date(end_date);
   const limit = 20;
   const skip  = (page - 1) * limit;
 
+  // 4) Query the Order collection
   const [ total, orders ] = await Promise.all([
     Order.countDocuments({ orderDate: { $gte: start, $lte: end } }),
-    Order.find({ orderDate: { $gte: start, $lte: end } }).skip(skip).limit(limit)
+    Order.find({ orderDate: { $gte: start, $lte: end } })
+         .skip(skip)
+         .limit(limit)
   ]);
   const totalPages = Math.ceil(total / limit);
 
-  const root = create({ version:"1.0", encoding:"utf-8" })
+  // 5) Build XML using xmlbuilder2
+  const root = create({ version: "1.0", encoding: "utf-8" })
     .ele("Orders", { pages: totalPages });
 
-  orders.forEach(o => {
+  orders.forEach((o) => {
     const od = root.ele("Order");
-    od.ele("OrderID").dat(o._id.toString());
-    od.ele("OrderNumber").dat(o.orderNumber);
-    od.ele("OrderDate").txt(o.orderDate.toLocaleString("en-US",{hour12:false}));
-    od.ele("LastModified").txt(o.lastModified.toLocaleString("en-US",{hour12:false}));
-    od.ele("OrderStatus").dat(o.orderStatus);
-    od.ele("ShippingMethod").dat(o.shippingMethod || "");
-    od.ele("PaymentMethod").dat(o.paymentMethod);
-    od.ele("CurrencyCode").txt(o.currencyCode);
-    od.ele("OrderTotal").txt(o.orderTotal.toFixed(2));
-    od.ele("TaxAmount").txt(o.taxAmount.toFixed(2));
-    od.ele("ShippingAmount").txt(o.shippingAmount.toFixed(2));
-    if (o.customerNotes) od.ele("CustomerNotes").dat(o.customerNotes);
-    if (o.internalNotes) od.ele("InternalNotes").dat(o.internalNotes);
-    od.ele("Gift").txt(o.gift.toString());
-    if (o.giftMessage) od.ele("GiftMessage").dat(o.giftMessage);
 
+    // Order identifiers & dates (ISO-8601)
+    od.ele("OrderID").txt(o._id.toString());
+    od.ele("OrderNumber").txt(o.orderNumber || "");
+    od.ele("OrderDate").txt(o.orderDate.toISOString());
+    const lastMod = o.lastModified
+      ? o.lastModified.toISOString()
+      : o.orderDate.toISOString();
+    od.ele("LastModified").txt(lastMod);
+
+    // Map your internal status to a ShipStation‐valid status
+    let ssStatus = (o.orderStatus || "").toLowerCase();
+    switch (ssStatus) {
+      case "processing":
+        ssStatus = "awaiting_shipment";
+        break;
+      // add more mappings if needed
+    }
+    od.ele("OrderStatus").txt(ssStatus);
+
+    od.ele("ShippingMethod").txt(o.shippingMethod || "");
+    od.ele("PaymentMethod").txt(o.paymentMethod || "");
+    od.ele("CurrencyCode").txt(o.currencyCode || "USD");
+
+    od.ele("OrderTotal").txt((o.orderTotal || 0).toFixed(2));
+    od.ele("TaxAmount").txt((o.taxAmount || 0).toFixed(2));
+    od.ele("ShippingAmount").txt((o.shippingAmount || 0).toFixed(2));
+    od.ele("Gift").txt(o.gift ? "true" : "false");
+    od.ele("CustomerNotes").txt(o.customerNotes || "");
+    od.ele("InternalNotes").txt(o.internalNotes || "");
+    od.ele("GiftMessage").txt(o.giftMessage || "");
+
+    // Customer & addresses
     const cust = od.ele("Customer");
-    cust.ele("CustomerCode").dat(o.customerCode || "");
-    const bill = cust.ele("BillTo");
-    Object.entries(o.billTo.toObject()).forEach(([k,v]) => bill.ele(k).dat(v || ""));
-    const ship = cust.ele("ShipTo");
-    Object.entries(o.shipTo.toObject()).forEach(([k,v]) => ship.ele(k).dat(v || ""));
+    cust.ele("CustomerCode").txt(o.customerCode || "");
 
-    const items = od.ele("Items");
-    o.items.forEach(i => {
-      const it = items.ele("Item");
-      it.ele("SKU").dat(i.sku);
-      it.ele("Name").dat(i.name);
-      it.ele("Quantity").txt(i.quantity);
-      it.ele("UnitPrice").txt(i.unitPrice.toFixed(2));
-      if (i.options?.size) {
-        const opts = it.ele("Options");
-        for (let [key,val] of i.options) {
-          opts.ele(key).dat(val);
+    // BillTo (capitalized tags exactly)
+    const bill = cust.ele("BillTo");
+    bill.ele("FullName").txt(o.billTo.fullName || "");
+    bill.ele("Company").txt(o.billTo.company || "");
+    bill.ele("Phone").txt(o.billTo.phone || "");
+    bill.ele("Email").txt(o.billTo.email || "");
+    bill.ele("Address1").txt(o.billTo.address1 || "");
+    bill.ele("Address2").txt(o.billTo.address2 || "");
+    bill.ele("City").txt(o.billTo.city || "");
+    bill.ele("State").txt(o.billTo.state || "");
+    bill.ele("PostalCode").txt(o.billTo.postalCode || "");
+    bill.ele("Country").txt(o.billTo.country || "");
+
+    // ShipTo (capitalized tags exactly)
+    const ship = cust.ele("ShipTo");
+    ship.ele("FullName").txt(o.shipTo.fullName || "");
+    ship.ele("Company").txt(o.shipTo.company || "");
+    ship.ele("Phone").txt(o.shipTo.phone || "");
+    ship.ele("Email").txt(o.shipTo.email || "");
+    ship.ele("Address1").txt(o.shipTo.address1 || "");
+    ship.ele("Address2").txt(o.shipTo.address2 || "");
+    ship.ele("City").txt(o.shipTo.city || "");
+    ship.ele("State").txt(o.shipTo.state || "");
+    ship.ele("PostalCode").txt(o.shipTo.postalCode || "");
+    ship.ele("Country").txt(o.shipTo.country || "");
+
+    // Items
+    const itemsNode = od.ele("Items");
+    (o.items || []).forEach((i) => {
+      const it = itemsNode.ele("Item");
+      it.ele("SKU").txt(i.sku || "");
+      it.ele("Name").txt(i.name || "");
+      it.ele("Quantity").txt(i.quantity != null ? i.quantity.toString() : "0");
+      it.ele("UnitPrice").txt((i.unitPrice || 0).toFixed(2));
+
+      // Build a plain JS object from i.options (Mongoose Map → plain object)
+      let plainOpts = {};
+      if (i.options && typeof i.options === "object") {
+        if (i.options instanceof Map) {
+          // Mongoose Map: convert to plain object
+          for (const [k, v] of i.options.entries()) {
+            plainOpts[k] = v;
+          }
+        } else {
+          // Already a plain object
+          plainOpts = i.options;
         }
       }
-      if (i.location) it.ele("Location").dat(i.location);
+
+      // If there are any valid option keys, nest them under <Options>
+      const validOptionKeys = Object.keys(plainOpts).filter((optKey) => {
+        // Skip any key starting with '$' or containing invalid XML chars
+        // XML name must match: ^[A-Za-z_][A-Za-z0-9_.-]*$
+        return /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(optKey);
+      });
+
+      if (validOptionKeys.length > 0) {
+        const optsNode = it.ele("Options");
+        validOptionKeys.forEach((optKey) => {
+          const optVal = plainOpts[optKey];
+          // Use .txt() or .dat() to wrap value in CDATA
+          optsNode.ele(optKey).txt(optVal != null ? optVal.toString() : "");
+        });
+      }
+
+      // Location (warehouse, etc.)
+      it.ele("Location").txt(i.location || "");
     });
   });
 
-  res.header("Content-Type","application/xml");
-  res.send(root.end({ prettyPrint: true }));
+  // 6) Send XML response
+  res.header("Content-Type", "application/xml");
+  return res.send(root.end({ prettyPrint: true }));
 };
 
 // ————————— Custom Store: Ship Notice POST —————————
