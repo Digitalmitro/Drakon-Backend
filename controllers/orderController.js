@@ -283,9 +283,9 @@ exports.exportOrders = async (req, res) => {
     const cust = od.ele("Customer");
     cust.ele("CustomerCode").txt(o.customerCode || "");
 
-    // BillTo (capitalized tags)
+    // BillTo (capitalized tags, using <Name> instead of <FullName>)
     const bill = cust.ele("BillTo");
-    bill.ele("FullName").txt(o.billTo.fullName || "");
+    bill.ele("Name").txt(o.billTo.fullName || "");
     bill.ele("Company").txt(o.billTo.company || "");
     bill.ele("Phone").txt(o.billTo.phone || "");
     bill.ele("Email").txt(o.billTo.email || "");
@@ -296,9 +296,9 @@ exports.exportOrders = async (req, res) => {
     bill.ele("PostalCode").txt(o.billTo.postalCode || "");
     bill.ele("Country").txt(o.billTo.country || "");
 
-    // ShipTo (capitalized tags)
+    // ShipTo (capitalized tags, using <Name> instead of <FullName>)
     const ship = cust.ele("ShipTo");
-    ship.ele("FullName").txt(o.shipTo.fullName || "");
+    ship.ele("Name").txt(o.shipTo.fullName || "");
     ship.ele("Company").txt(o.shipTo.company || "");
     ship.ele("Phone").txt(o.shipTo.phone || "");
     ship.ele("Email").txt(o.shipTo.email || "");
@@ -333,7 +333,6 @@ exports.exportOrders = async (req, res) => {
 
       // Filter valid XML names and build <Options> if any
       const validOptionKeys = Object.keys(plainOpts).filter((optKey) => {
-        // Valid XML tag names: start with letter or underscore, no invalid chars
         return /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(optKey);
       });
 
