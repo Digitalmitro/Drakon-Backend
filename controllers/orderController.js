@@ -253,12 +253,12 @@ exports.exportOrders = async (req, res) => {
     od.ele("OrderID").txt(o._id.toString());
     od.ele("OrderNumber").txt(o.orderNumber || "");
 
-    // OrderDate & LastModified in MM/DD/YYYY HH:MM:SS
+    // OrderDate & LastModified in MM/DD/YYYY HH:MM:SS (ShipStation requires this pattern) 
     od.ele("OrderDate").txt(toShipStationDate(o.orderDate));
     const lastMod = o.lastModified || o.orderDate;
     od.ele("LastModified").txt(toShipStationDate(lastMod));
 
-    // Map internal status → ShipStation status
+    // Map internal status → ShipStation status (e.g. “Processing” → “awaiting_shipment”) :contentReference[oaicite:2]{index=2}
     let ssStatus = (o.orderStatus || "").toLowerCase();
     if (ssStatus === "processing") ssStatus = "awaiting_shipment";
     od.ele("OrderStatus").txt(ssStatus);
@@ -283,7 +283,7 @@ exports.exportOrders = async (req, res) => {
     const cust = od.ele("Customer");
     cust.ele("CustomerCode").txt(o.customerCode || "");
 
-    // BillTo (capitalized tags, using <Name> instead of <FullName>)
+    // BillTo (capitalized tags, using <Name> instead of <FullName>) :contentReference[oaicite:3]{index=3}
     const bill = cust.ele("BillTo");
     bill.ele("Name").txt(o.billTo.fullName || "");
     bill.ele("Company").txt(o.billTo.company || "");
@@ -296,12 +296,11 @@ exports.exportOrders = async (req, res) => {
     bill.ele("PostalCode").txt(o.billTo.postalCode || "");
     bill.ele("Country").txt(o.billTo.country || "");
 
-    // ShipTo (capitalized tags, using <Name> instead of <FullName>)
+    // ShipTo (capitalized tags, removing invalid <Email> and <Phone>) :contentReference[oaicite:4]{index=4}
     const ship = cust.ele("ShipTo");
     ship.ele("Name").txt(o.shipTo.fullName || "");
     ship.ele("Company").txt(o.shipTo.company || "");
-    ship.ele("Phone").txt(o.shipTo.phone || "");
-    ship.ele("Email").txt(o.shipTo.email || "");
+    // Removed: <Phone> and <Email> from ShipTo, as ShipStation only allows City, PostalCode, Country, Address1, State, Address2 :contentReference[oaicite:5]{index=5}
     ship.ele("Address1").txt(o.shipTo.address1 || "");
     ship.ele("Address2").txt(o.shipTo.address2 || "");
     ship.ele("City").txt(o.shipTo.city || "");
