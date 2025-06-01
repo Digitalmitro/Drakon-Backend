@@ -203,16 +203,27 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
+// Helper to format JS Date → “MM/DD/YYYY HH:MM:SS”
+function toShipStationDate(dt) {
+  const mm   = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd   = String(dt.getDate()).padStart(2, "0");
+  const yyyy = dt.getFullYear();
+  const hh   = String(dt.getHours()).padStart(2, "0");
+  const mi   = String(dt.getMinutes()).padStart(2, "0");
+  const ss   = String(dt.getSeconds()).padStart(2, "0");
+  return `${mm}/${dd}/${yyyy} ${hh}:${mi}:${ss}`;
+}
+
 exports.exportOrders = async (req, res) => {
-  // 1) Basic authentication
+  // 1) Enforce Basic Auth
   if (!requireBasicAuth(req, res)) return;
 
-  // 2) Validate action=export
+  // 2) Must be ?action=export
   if (req.query.action !== "export") {
     return res.status(400).send("Invalid action");
   }
 
-  // 3) Parse start/end dates from query
+  // 3) Parse start/end dates
   const { start_date, end_date, page = 1 } = req.query;
   if (!start_date || !end_date) {
     return res.status(400).send("Missing start_date or end_date");
@@ -222,7 +233,7 @@ exports.exportOrders = async (req, res) => {
   const limit = 20;
   const skip  = (page - 1) * limit;
 
-  // 4) Query the Order collection
+  // 4) Query MongoDB for orders in date range
   const [ total, orders ] = await Promise.all([
     Order.countDocuments({ orderDate: { $gte: start, $lte: end } }),
     Order.find({ orderDate: { $gte: start, $lte: end } })
@@ -231,49 +242,48 @@ exports.exportOrders = async (req, res) => {
   ]);
   const totalPages = Math.ceil(total / limit);
 
-  // 5) Build XML using xmlbuilder2
+  // 5) Build XML response
   const root = create({ version: "1.0", encoding: "utf-8" })
     .ele("Orders", { pages: totalPages });
 
   orders.forEach((o) => {
     const od = root.ele("Order");
 
-    // Order identifiers & dates (ISO-8601)
+    // OrderID & OrderNumber
     od.ele("OrderID").txt(o._id.toString());
     od.ele("OrderNumber").txt(o.orderNumber || "");
-    od.ele("OrderDate").txt(o.orderDate.toISOString());
-    const lastMod = o.lastModified
-      ? o.lastModified.toISOString()
-      : o.orderDate.toISOString();
-    od.ele("LastModified").txt(lastMod);
 
-    // Map your internal status to a ShipStation‐valid status
+    // OrderDate & LastModified in MM/DD/YYYY HH:MM:SS
+    od.ele("OrderDate").txt(toShipStationDate(o.orderDate));
+    const lastMod = o.lastModified || o.orderDate;
+    od.ele("LastModified").txt(toShipStationDate(lastMod));
+
+    // Map internal status → ShipStation status
     let ssStatus = (o.orderStatus || "").toLowerCase();
-    switch (ssStatus) {
-      case "processing":
-        ssStatus = "awaiting_shipment";
-        break;
-      // add more mappings if needed
-    }
+    if (ssStatus === "processing") ssStatus = "awaiting_shipment";
     od.ele("OrderStatus").txt(ssStatus);
 
+    // ShippingMethod, PaymentMethod, CurrencyCode
     od.ele("ShippingMethod").txt(o.shippingMethod || "");
     od.ele("PaymentMethod").txt(o.paymentMethod || "");
     od.ele("CurrencyCode").txt(o.currencyCode || "USD");
 
+    // Totals (two decimals)
     od.ele("OrderTotal").txt((o.orderTotal || 0).toFixed(2));
     od.ele("TaxAmount").txt((o.taxAmount || 0).toFixed(2));
     od.ele("ShippingAmount").txt((o.shippingAmount || 0).toFixed(2));
     od.ele("Gift").txt(o.gift ? "true" : "false");
+
+    // Optional notes
     od.ele("CustomerNotes").txt(o.customerNotes || "");
     od.ele("InternalNotes").txt(o.internalNotes || "");
     od.ele("GiftMessage").txt(o.giftMessage || "");
 
-    // Customer & addresses
+    // Customer block
     const cust = od.ele("Customer");
     cust.ele("CustomerCode").txt(o.customerCode || "");
 
-    // BillTo (capitalized tags exactly)
+    // BillTo (capitalized tags)
     const bill = cust.ele("BillTo");
     bill.ele("FullName").txt(o.billTo.fullName || "");
     bill.ele("Company").txt(o.billTo.company || "");
@@ -286,7 +296,7 @@ exports.exportOrders = async (req, res) => {
     bill.ele("PostalCode").txt(o.billTo.postalCode || "");
     bill.ele("Country").txt(o.billTo.country || "");
 
-    // ShipTo (capitalized tags exactly)
+    // ShipTo (capitalized tags)
     const ship = cust.ele("ShipTo");
     ship.ele("FullName").txt(o.shipTo.fullName || "");
     ship.ele("Company").txt(o.shipTo.company || "");
@@ -299,7 +309,7 @@ exports.exportOrders = async (req, res) => {
     ship.ele("PostalCode").txt(o.shipTo.postalCode || "");
     ship.ele("Country").txt(o.shipTo.country || "");
 
-    // Items
+    // Items block
     const itemsNode = od.ele("Items");
     (o.items || []).forEach((i) => {
       const it = itemsNode.ele("Item");
@@ -308,24 +318,22 @@ exports.exportOrders = async (req, res) => {
       it.ele("Quantity").txt(i.quantity != null ? i.quantity.toString() : "0");
       it.ele("UnitPrice").txt((i.unitPrice || 0).toFixed(2));
 
-      // Build a plain JS object from i.options (Mongoose Map → plain object)
+      // Convert i.options (Mongoose Map or object) → plain JS object
       let plainOpts = {};
       if (i.options && typeof i.options === "object") {
         if (i.options instanceof Map) {
-          // Mongoose Map: convert to plain object
+          // Iterate Mongoose Map
           for (const [k, v] of i.options.entries()) {
             plainOpts[k] = v;
           }
         } else {
-          // Already a plain object
           plainOpts = i.options;
         }
       }
 
-      // If there are any valid option keys, nest them under <Options>
+      // Filter valid XML names and build <Options> if any
       const validOptionKeys = Object.keys(plainOpts).filter((optKey) => {
-        // Skip any key starting with '$' or containing invalid XML chars
-        // XML name must match: ^[A-Za-z_][A-Za-z0-9_.-]*$
+        // Valid XML tag names: start with letter or underscore, no invalid chars
         return /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(optKey);
       });
 
@@ -333,17 +341,16 @@ exports.exportOrders = async (req, res) => {
         const optsNode = it.ele("Options");
         validOptionKeys.forEach((optKey) => {
           const optVal = plainOpts[optKey];
-          // Use .txt() or .dat() to wrap value in CDATA
           optsNode.ele(optKey).txt(optVal != null ? optVal.toString() : "");
         });
       }
 
-      // Location (warehouse, etc.)
+      // Location (optional)
       it.ele("Location").txt(i.location || "");
     });
   });
 
-  // 6) Send XML response
+  // 6) Send XML with correct Content-Type
   res.header("Content-Type", "application/xml");
   return res.send(root.end({ prettyPrint: true }));
 };
