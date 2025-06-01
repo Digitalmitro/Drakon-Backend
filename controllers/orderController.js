@@ -249,41 +249,55 @@ exports.exportOrders = async (req, res) => {
   orders.forEach((o) => {
     const od = root.ele("Order");
 
-    // OrderID & OrderNumber
+    // ─── OrderID & OrderNumber ───
     od.ele("OrderID").txt(o._id.toString());
     od.ele("OrderNumber").txt(o.orderNumber || "");
 
-    // OrderDate & LastModified in MM/DD/YYYY HH:MM:SS (ShipStation requires this pattern) 
+    // ─── OrderDate & LastModified (MM/DD/YYYY HH:MM:SS) ───
     od.ele("OrderDate").txt(toShipStationDate(o.orderDate));
     const lastMod = o.lastModified || o.orderDate;
     od.ele("LastModified").txt(toShipStationDate(lastMod));
 
-    // Map internal status → ShipStation status (e.g. “Processing” → “awaiting_shipment”) :contentReference[oaicite:2]{index=2}
+    // ─── Map internal status → ShipStation status ───
     let ssStatus = (o.orderStatus || "").toLowerCase();
     if (ssStatus === "processing") ssStatus = "awaiting_shipment";
     od.ele("OrderStatus").txt(ssStatus);
 
-    // ShippingMethod, PaymentMethod, CurrencyCode
+    // ─── ShippingMethod, PaymentMethod, CurrencyCode ───
     od.ele("ShippingMethod").txt(o.shippingMethod || "");
     od.ele("PaymentMethod").txt(o.paymentMethod || "");
     od.ele("CurrencyCode").txt(o.currencyCode || "USD");
 
-    // Totals (two decimals)
-    od.ele("OrderTotal").txt((o.orderTotal || 0).toFixed(2));
-    od.ele("TaxAmount").txt((o.taxAmount || 0).toFixed(2));
-    od.ele("ShippingAmount").txt((o.shippingAmount || 0).toFixed(2));
+    // ─── Compute OrderTotal from items + shipping + tax − discount ───
+    // Sum up each line: unitPrice × quantity
+    const itemsTotal = (o.items || []).reduce((sum, i) => {
+      const linePrice = (i.unitPrice || 0) * (i.quantity || 0);
+      return sum + linePrice;
+    }, 0);
+
+    // If you store shipping and tax separately, include those too:
+    const shippingAmt = o.shippingAmount || 0;
+    const taxAmt      = o.taxAmount || 0;
+    const discountAmt = o.discount || 0;   // if you track discounts at the order level
+
+    // Final order total = items + shipping + tax − discount
+    const computedTotal = itemsTotal + shippingAmt + taxAmt - discountAmt;
+
+    od.ele("OrderTotal").txt(computedTotal.toFixed(2));
+    od.ele("TaxAmount").txt(taxAmt.toFixed(2));
+    od.ele("ShippingAmount").txt(shippingAmt.toFixed(2));
     od.ele("Gift").txt(o.gift ? "true" : "false");
 
-    // Optional notes
+    // ─── Optional notes ───
     od.ele("CustomerNotes").txt(o.customerNotes || "");
     od.ele("InternalNotes").txt(o.internalNotes || "");
     od.ele("GiftMessage").txt(o.giftMessage || "");
 
-    // Customer block
+    // ─── Customer block ───
     const cust = od.ele("Customer");
     cust.ele("CustomerCode").txt(o.customerCode || "");
 
-    // BillTo (capitalized tags, using <Name> instead of <FullName>) :contentReference[oaicite:3]{index=3}
+    // ─── BillTo (capitalized tags, using <Name> instead of <FullName>) ───
     const bill = cust.ele("BillTo");
     bill.ele("Name").txt(o.billTo.fullName || "");
     bill.ele("Company").txt(o.billTo.company || "");
@@ -296,11 +310,10 @@ exports.exportOrders = async (req, res) => {
     bill.ele("PostalCode").txt(o.billTo.postalCode || "");
     bill.ele("Country").txt(o.billTo.country || "");
 
-    // ShipTo (capitalized tags, removing invalid <Email> and <Phone>) :contentReference[oaicite:4]{index=4}
+    // ─── ShipTo (capitalized tags, no <Email> or <Phone> in ShipTo) ───
     const ship = cust.ele("ShipTo");
     ship.ele("Name").txt(o.shipTo.fullName || "");
     ship.ele("Company").txt(o.shipTo.company || "");
-    // Removed: <Phone> and <Email> from ShipTo, as ShipStation only allows City, PostalCode, Country, Address1, State, Address2 :contentReference[oaicite:5]{index=5}
     ship.ele("Address1").txt(o.shipTo.address1 || "");
     ship.ele("Address2").txt(o.shipTo.address2 || "");
     ship.ele("City").txt(o.shipTo.city || "");
@@ -308,7 +321,7 @@ exports.exportOrders = async (req, res) => {
     ship.ele("PostalCode").txt(o.shipTo.postalCode || "");
     ship.ele("Country").txt(o.shipTo.country || "");
 
-    // Items block
+    // ─── Items block ───
     const itemsNode = od.ele("Items");
     (o.items || []).forEach((i) => {
       const it = itemsNode.ele("Item");
@@ -321,7 +334,6 @@ exports.exportOrders = async (req, res) => {
       let plainOpts = {};
       if (i.options && typeof i.options === "object") {
         if (i.options instanceof Map) {
-          // Iterate Mongoose Map
           for (const [k, v] of i.options.entries()) {
             plainOpts[k] = v;
           }
