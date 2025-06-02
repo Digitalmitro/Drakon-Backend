@@ -1,17 +1,17 @@
 // controllers/orderController.js
-const mongoose    = require("mongoose");
-const Order       = require("../models/Order");
-const Cart        = require("../models/Cart");
-const auth        = require("basic-auth");                 // for Custom Store endpoints :contentReference[oaicite:7]{index=7}
-const { create }  = require("xmlbuilder2");                // for building export XML
-const parser      = require("fast-xml-parser");            // for parsing ShipNotice XML
-const axios       = require("axios");
+const mongoose = require("mongoose");
+const Order = require("../models/Order");
+const Cart = require("../models/Cart");
+const auth = require("basic-auth");                 // for Custom Store endpoints :contentReference[oaicite:7]{index=7}
+const { create } = require("xmlbuilder2");                // for building export XML
+const parser = require("fast-xml-parser");            // for parsing ShipNotice XML
+const axios = require("axios");
 
-const SHIP_API_URL    = "https://ssapi.shipstation.com/v2/";
-const SHIP_API_KEY    = process.env.SHIPSTATION_API_KEY;
+const SHIP_API_URL = "https://ssapi.shipstation.com/v2/";
+const SHIP_API_KEY = process.env.SHIPSTATION_API_KEY;
 const SHIP_API_SECRET = process.env.SHIPSTATION_API_SECRET;
-const SS_USER         = process.env.SS_USER;               // for GET/POST auth
-const SS_PASS         = process.env.SS_PASS;
+const SS_USER = process.env.SS_USER;               // for GET/POST auth
+const SS_PASS = process.env.SS_PASS;
 
 // —————————————— Helper: Basic Auth Middleware ——————————————
 function requireBasicAuth(req, res) {
@@ -26,6 +26,10 @@ function requireBasicAuth(req, res) {
 
 // — Create Order (unchanged, but now populates billTo & shipTo) ——
 exports.createOrder = async (req, res) => {
+
+
+  console.log("Creating order with body:", req.body);
+
   try {
     // 1) Determine if there’s an authenticated user
     const userIdFromToken = req.rootUser?._id || null;
@@ -37,22 +41,22 @@ exports.createOrder = async (req, res) => {
       if (!cart || !cart.products || cart.products.length === 0) {
         return res.status(400).json({ message: "Cart is empty" });
       }
-      cartItems    = cart.products;
-      subtotal     = cart.subtotal;
+      cartItems = cart.products;
+      subtotal = cart.subtotal;
       shippingCost = cart.shippingCost;
-      discount     = cart.discount;
-      totalAmount  = cart.totalAmount;
+      discount = cart.discount;
+      totalAmount = cart.totalAmount;
     } else {
       // ── Guest checkout: expect cart data in the request body ──
       const bodyCart = req.body.cartData;
       if (!Array.isArray(bodyCart) || bodyCart.length === 0) {
         return res.status(400).json({ message: "Cart is empty (guest)" });
       }
-      cartItems    = bodyCart;
-      subtotal     = req.body.subtotal;
+      cartItems = bodyCart;
+      subtotal = req.body.subtotal;
       shippingCost = req.body.shippingCost;
-      discount     = req.body.discount;
-      totalAmount  = req.body.totalAmount;
+      discount = req.body.discount;
+      totalAmount = req.body.totalAmount;
 
       // Validate that all those numbers exist
       if (
@@ -73,7 +77,7 @@ exports.createOrder = async (req, res) => {
       paymentStatus = "Pending",
       shippingAddress,
       billingAddress,
-      customerCode   = ""
+      customerCode = ""
     } = req.body;
 
     if (!paymentMethod || !shippingAddress) {
@@ -86,31 +90,31 @@ exports.createOrder = async (req, res) => {
     // 4) Build the “items” array in the shape our Order schema wants
     //    (same for both user‐cart and guest‐cart)
     const itemsForOrder = cartItems.map((p) => ({
-      sku:       p.productId.toString(),
-      name:      p.productTitle,
-      quantity:  p.quantity,
+      sku: p.productId.toString(),
+      name: p.productTitle,
+      quantity: p.quantity,
       unitPrice: p.price,
-      options:   p.options || {},
-      location:  p.location || ""
+      options: p.options || {},
+      location: p.location || ""
     }));
 
     // 5) Construct the new Order document
     const newOrder = new Order({
       orderNumber,
-      orderDate:      new Date(),
-      userId:         userIdFromToken,           // will be null if guest
+      orderDate: new Date(),
+      userId: userIdFromToken,           // will be null if guest
       customerCode,                             // allow email or empty string
-      billTo:         billingAddress || shippingAddress,
-      shipTo:         shippingAddress,
-      items:          itemsForOrder,
+      billTo: billingAddress || shippingAddress,
+      shipTo: shippingAddress,
+      items: itemsForOrder,
       subtotal,
       shippingAmount: shippingCost,
       discount,
-      orderTotal:     totalAmount,
-      currencyCode:   "USD",
+      orderTotal: totalAmount,
+      currencyCode: "USD",
       paymentMethod,
       paymentStatus,
-      orderStatus:    "Processing"
+      orderStatus: "Processing"
     });
 
     // 6) Save the Order, and if it was a logged‐in user, delete their Cart
@@ -133,12 +137,12 @@ exports.createShippingOrder = async (req, res) => {
     const orderData = {
       orderNumber, orderDate, orderStatus, customerCode,
       billTo, shipTo, items,
-      carrierCode:  "stamps_com",
-      serviceCode:  "usps_priority",
-      packageCode:  "package",
+      carrierCode: "stamps_com",
+      serviceCode: "usps_priority",
+      packageCode: "package",
       confirmation: "delivery",
-      weight:       { value: 2, units: "pounds" },
-      dimensions:   { length: 10, width: 5, height: 5, units: "inches" }
+      weight: { value: 2, units: "pounds" },
+      dimensions: { length: 10, width: 5, height: 5, units: "inches" }
     };
     const response = await axios.post(
       `${SHIP_API_URL}orders/createorder`,
@@ -182,15 +186,30 @@ exports.getOrderById = async (req, res) => {
 };
 
 exports.getOrder = async (req, res) => {
-    try {
-    
-      const order = await Order.find().populate("products.productId", "title price image");
-      if (!order) return res.status(404).json({ message: "Order not found" });
-      res.status(200).json(order);
-    } catch (error) {
-      res.status(500).json({ error: "Server error" });
+  try {
+
+    const order = await Order.find().populate("products.productId", "title price image");
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.status(200).json(order);
+  } catch (error) {
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+exports.getAllOrders = async (req, res) => {
+  try {
+    const orders = await Order.find().sort({ createdAt: -1 }); // latest orders first
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ message: "No orders found" });
     }
-  };
+    res.status(200).json(orders);
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+};
+
+
 // Update Order Status (Admin Only)
 exports.updateOrderStatus = async (req, res) => {
   try {
@@ -205,12 +224,12 @@ exports.updateOrderStatus = async (req, res) => {
 
 // Helper to format JS Date → “MM/DD/YYYY HH:MM:SS”
 function toShipStationDate(dt) {
-  const mm   = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd   = String(dt.getDate()).padStart(2, "0");
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
   const yyyy = dt.getFullYear();
-  const hh   = String(dt.getHours()).padStart(2, "0");
-  const mi   = String(dt.getMinutes()).padStart(2, "0");
-  const ss   = String(dt.getSeconds()).padStart(2, "0");
+  const hh = String(dt.getHours()).padStart(2, "0");
+  const mi = String(dt.getMinutes()).padStart(2, "0");
+  const ss = String(dt.getSeconds()).padStart(2, "0");
   return `${mm}/${dd}/${yyyy} ${hh}:${mi}:${ss}`;
 }
 
@@ -229,16 +248,16 @@ exports.exportOrders = async (req, res) => {
     return res.status(400).send("Missing start_date or end_date");
   }
   const start = new Date(start_date);
-  const end   = new Date(end_date);
+  const end = new Date(end_date);
   const limit = 20;
-  const skip  = (page - 1) * limit;
+  const skip = (page - 1) * limit;
 
   // 4) Query MongoDB for orders in date range
-  const [ total, orders ] = await Promise.all([
+  const [total, orders] = await Promise.all([
     Order.countDocuments({ orderDate: { $gte: start, $lte: end } }),
     Order.find({ orderDate: { $gte: start, $lte: end } })
-         .skip(skip)
-         .limit(limit)
+      .skip(skip)
+      .limit(limit)
   ]);
   const totalPages = Math.ceil(total / limit);
 
@@ -277,7 +296,7 @@ exports.exportOrders = async (req, res) => {
 
     // If you store shipping and tax separately, include those too:
     const shippingAmt = o.shippingAmount || 0;
-    const taxAmt      = o.taxAmount || 0;
+    const taxAmt = o.taxAmount || 0;
     const discountAmt = o.discount || 0;   // if you track discounts at the order level
 
     // Final order total = items + shipping + tax − discount
@@ -372,17 +391,85 @@ exports.shipNotify = async (req, res) => {
     return res.status(400).send("Invalid action");
 
   const xml = req.body;
-  const json = parser.parse(xml, { ignoreAttributes:false, cdataPropName:"dat" });
-  const sn   = json.ShipNotice;
+  const json = parser.parse(xml, { ignoreAttributes: false, cdataPropName: "dat" });
+  const sn = json.ShipNotice;
   await Order.findOneAndUpdate(
     { orderNumber: sn.OrderNumber },
     {
-      orderStatus:   "Shipped",
-      lastModified:  new Date(sn.ShipDate),
-      shippingMethod:`${sn.Carrier}-${sn.Service}`,
+      orderStatus: "Shipped",
+      lastModified: new Date(sn.ShipDate),
+      shippingMethod: `${sn.Carrier}-${sn.Service}`,
       trackingNumber: sn.TrackingNumber
     }
   );
   res.sendStatus(200);
 };
 
+
+
+exports.createTestOrder = async (req, res) => {
+
+  try {
+    const dummyOrder = new Order({
+      orderNumber: "ORD" + Math.floor(Math.random() * 1000000), // Unique-ish
+      orderDate: new Date(),
+
+      userId: null, // not setting any user yet
+      customerCode: "guest@example.com",
+
+      billTo: {
+        fullName: "Dummy Bill",
+        phone: "1234567890",
+        email: "bill@example.com",
+        address1: "123 Fake Street",
+        city: "Faketown",
+        postalCode: "12345",
+        country: "Neverland",
+      },
+      shipTo: {
+        fullName: "Dummy Ship",
+        phone: "0987654321",
+        email: "ship@example.com",
+        address1: "456 Imaginary Road",
+        city: "Nowhere City",
+        postalCode: "54321",
+        country: "Neverland",
+      },
+
+      items: [
+        {
+          sku: "SKU123",
+          name: "Dummy Product",
+          quantity: 2,
+          unitPrice: 19.99,
+          location: "Warehouse A",
+        },
+      ],
+
+      subtotal: 39.98,
+      taxAmount: 2.00,
+      shippingAmount: 5.00,
+      discount: 0,
+      orderTotal: 46.98,
+
+      currencyCode: "USD",
+      shippingMethod: "USPSPriorityMail",
+      paymentMethod: "Credit Card",
+      paymentStatus: "Paid",
+      orderStatus: "Processing",
+
+      customerNotes: "This is a dummy order",
+      gift: false,
+    });
+
+    const saved = await dummyOrder.save();
+    res.status(201).json({
+      message: "Dummy order saved successfully",
+      orderId: saved._id,
+    });
+  } catch (err) {
+    console.error("Failed to create dummy order:", err);
+    res.status(500).json({ error: "Failed to save dummy order" });
+  }
+
+};
