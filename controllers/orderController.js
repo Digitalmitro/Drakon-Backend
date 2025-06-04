@@ -186,15 +186,26 @@ exports.getOrderById = async (req, res) => {
 };
 
 exports.getOrder = async (req, res) => {
-  try {
+  const userId = req.rootUser?._id;
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized: No user found" });
+  }
 
-    const order = await Order.find().populate("products.productId", "title price image");
-    if (!order) return res.status(404).json({ message: "Order not found" });
-    res.status(200).json(order);
+  try {
+    const orders = await Order.find({ userId }) // Only fetch orders for the logged-in user
+      .populate("products.productId", "title price image");
+
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ message: "No orders found for this user" });
+    }
+
+    res.status(200).json(orders);
   } catch (error) {
+    console.error("Error fetching orders:", error);
     res.status(500).json({ error: "Server error" });
   }
 };
+
 
 exports.getAllOrders = async (req, res) => {
   try {
