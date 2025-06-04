@@ -1461,56 +1461,36 @@ server.post("/addressbookbilling", async (req, res) => {
   } = req.body;
 
   try {
-    const existingPackage = await AddressbookBillingModel.findOne({ user_id });
-    // Create a new instance of AdvisorpackageModel
-    if (!existingPackage) {
-      const newPackage = new AddressbookBillingModel({
-        billingfirstName,
-        billinglastName,
-        billingcountry,
-        billingstreetAddress,
-        billingcity,
-        billingstate,
-        billingzipcode,
-        billingphone,
-        billingemail,
-        user_id,
-      });
+    // Har baar naya billing address create karo
+    const newBilling = new AddressbookBillingModel({
+      billingfirstName,
+      billinglastName,
+      billingcountry,
+      billingstreetAddress,
+      billingcity,
+      billingstate,
+      billingzipcode,
+      billingphone,
+      billingemail,
+      user_id,
+    });
 
-      // Save the package to the database
-      await newPackage.save();
+    await newBilling.save();
 
-      // Update the user's packages array
-      await RegisterclientModal.findByIdAndUpdate(
-        user_id,
-        { $push: { addressbookbilling: newPackage._id } },
-        { new: true }
-      );
-    } else {
-      await AddressbookBillingModel.findOneAndUpdate(
-        { user_id },
-        {
-          billingfirstName,
-          billinglastName,
-          billingcountry,
-          billingstreetAddress,
-          billingcity,
-          billingstate,
-          billingzipcode,
-          billingphone,
-          billingemail,
-        },
-        { new: true }
-      );
-    }
+    // User ke billing array me push karo
+    await RegisterclientModal.findByIdAndUpdate(
+      user_id,
+      { $push: { addressbookbilling: newBilling._id } },
+      { new: true }
+    );
 
-    // Send a success response
-    res.send("Billing Address Created");
+    res.send("New Billing Address Created");
   } catch (error) {
-    console.log(error);
+    console.error("Failed to create billing address:", error);
     res.status(500).send("Internal Server Error");
   }
 });
+
 // Create a new shipping address (allows multiples per user)
 server.post("/addressbookshipping", async (req, res) => {
   const {
@@ -1526,8 +1506,8 @@ server.post("/addressbookshipping", async (req, res) => {
   } = req.body;
 
   try {
-    // 1️⃣ always create a new AddressBookShippingModel
-    const newAddr = new AddressBookShippingModel({
+    // 1️⃣ Always create a new AddressBookShippingModel entry
+    const newShipping = new AddressBookShippingModel({
       shippingfirstName,
       shippinglastName,
       shippingcountry,
@@ -1538,22 +1518,27 @@ server.post("/addressbookshipping", async (req, res) => {
       shippingphone,
       user_id,
     });
-    await newAddr.save();
 
-    // 2️⃣ push the new address _id onto the user's array
+    await newShipping.save();
+
+    // 2️⃣ Push the new address ID into the user's shipping address array
     await RegisterclientModal.findByIdAndUpdate(
       user_id,
-      { $push: { addressbookShipping: newAddr._id } },
+      { $push: { addressbookShipping: newShipping._id } },
       { new: true }
     );
 
-    // 3️⃣ return the new address
-    res.status(201).json(newAddr);
+    // 3️⃣ Return the newly created address
+    res.status(201).json({
+      message: "Shipping address created successfully",
+      shippingAddress: newShipping,
+    });
   } catch (error) {
     console.error("Error in /addressbookshipping:", error);
-    res.status(500).send("Internal Server Error");
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 // Get all shipping addresses for a given user
 server.get("/addressbookshipping/:user_id", async (req, res) => {
@@ -1587,13 +1572,11 @@ server.put("/addressbookshipping/:id", async (req, res) => {
 server.get("/addressbookbilling/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const data = await RegisterclientModal.findById(id).populate(
-      "addressbookbilling"
-    );
+    const data = await AddressbookBillingModel.find({ user_id: id });
     res.send(data);
   } catch (error) {
     console.log(error);
-    res.send(error);
+    res.status(500).send("Internal Server Error");
   }
 });
 // Client all created Address Book Details
@@ -1844,7 +1827,7 @@ server.get("/order/:id", orderController.getUserOrders);
 // 4. Get all orders in the system
 // GET /order
 // —————————————————————————————————————————————
-server.get("/order", orderController.getOrder);
+server.get("/order", userAuth, orderController.getOrder);
 
 // —————————————————————————————————————————————
 // 5. Get a single order by its orderNumber or _id

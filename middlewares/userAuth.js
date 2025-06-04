@@ -10,12 +10,13 @@ const userAuth = async (req, res, next) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ message: 'Access Denied. No token provided' });
     }
-  
+
     const token = authHeader.split(' ')[1]; // Extract token after "Bearer"
-  
-    const verifyToken =  jwt.verify(token, process.env.secret_key);
+
+    const verifyToken = jwt.verify(token, process.env.secret_key);
     const rootUser = await RegisterclientModal.findOne({ _id: verifyToken._id });
     const rootAdmin = await RegisteradminModal.findById(verifyToken._id);
+
 
     if (!rootUser && !rootAdmin) {
       throw new Error("User Not Found.");
@@ -23,7 +24,6 @@ const userAuth = async (req, res, next) => {
 
     req.token = token;
     req.rootUser = rootUser || rootAdmin;
-
     next();
   } catch (error) {
     res.status(401).send("Unauthorized : No token provided");
