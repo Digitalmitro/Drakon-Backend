@@ -1,4 +1,3 @@
-
 //admin ---      process.env.REACT_APP_BACKEND_API
 // client ---   import.meta.env.VITE_BACKEND_API
 require("dotenv").config();
@@ -47,7 +46,7 @@ const {
   InventoryroductModal,
 } = require("./models/ClientModel/InventoryProduct");
 const topCategoryRoutes = require("./routes/topCategoryRoutes");
-
+const orderController = require('./controllers/orderController')
 
 require("dotenv").config();
 
@@ -66,6 +65,7 @@ const categoryRoutes = require("./routes/categoryRoutes");
 const cartRoutes = require("./routes/cartRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const stripeRoutes = require("./routes/stripeRoutes");
+const { default: axios } = require("axios");
 connection();
 
 //welcome
@@ -222,7 +222,7 @@ server.post("/registeradmin", async (req, res) => {
 
   try {
     // Check if the email already exists in the database
-    const existingAdvisor = await RegisteradminModal.findOne({email});
+    const existingAdvisor = await RegisteradminModal.findOne({ email });
 
     if (existingAdvisor) {
       // If email already exists, send an error response
@@ -428,14 +428,18 @@ server.get("/products", async (req, res) => {
   try {
     const { category } = req.query;
     const limit = parseInt(req.query.limit) || 10;
- 
+
     if (!category) {
-      return res.status(401).json({message:"not provide category"})
+      return res.status(401).json({ message: "not provide category" });
     }
-    const products = await FeaturedpoductModal.find({category:category}).limit(limit);
+    const products = await FeaturedpoductModal.find({
+      category: category,
+    }).limit(limit);
 
     if (!products.length) {
-      return res.status(404).json({ message: "No products found in this category" });
+      return res
+        .status(404)
+        .json({ message: "No products found in this category" });
     }
 
     res.status(200).json(products);
@@ -444,7 +448,6 @@ server.get("/products", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 // GET all products
 server.get("/allproducts", async (req, res) => {
@@ -458,7 +461,7 @@ server.get("/allproducts", async (req, res) => {
   }
 });
 
-server.get("/top-products",async(req,res)=>{
+server.get("/top-products", async (req, res) => {
   try {
     const categories = await FeaturedpoductModal.distinct("category"); // Get unique categories
     let topProducts = [];
@@ -478,7 +481,7 @@ server.get("/top-products",async(req,res)=>{
     console.error("Error fetching top products:", error);
     res.status(500).json({ error: "Internal server error" });
   }
-})
+});
 // GET product by ID
 server.get("/products/:id", async (req, res) => {
   const productId = req.params.id;
@@ -1083,7 +1086,7 @@ server.get("/logo", async (req, res) => {
 //Client Section
 // Client  Register//
 server.post("/registerclient", async (req, res) => {
-  const { email, password, name} = req.body;
+  const { email, password, name } = req.body;
 
   try {
     // Check if the email already exists in the database
@@ -1095,8 +1098,8 @@ server.post("/registerclient", async (req, res) => {
       // If email already exists, send an error response
       return res.status(400).send("User already exists");
     }
-    const firstname=name.split(" ")[0];
-    const lastname = name.split(" ")[1]
+    const firstname = name.split(" ")[0];
+    const lastname = name.split(" ")[1];
     // Create a new instance of RegisteradvisorModal with the hashed password
     const newData = new RegisterclientModal({
       firstName: firstname,
@@ -1319,7 +1322,7 @@ server.get("/getclients", async (req, res) => {
 });
 
 //reset password
-server.put("/reset-password",userAuth, async(req,res)=>{
+server.put("/reset-password", userAuth, async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
     const userId = req.rootUser._id;
@@ -1345,12 +1348,11 @@ server.put("/reset-password",userAuth, async(req,res)=>{
     await user.save();
 
     res.json({ message: "Password updated successfully" });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error" });
   }
-})
+});
 
 //Account Details Section From Client
 // Create Account Details Client populate
@@ -1459,56 +1461,37 @@ server.post("/addressbookbilling", async (req, res) => {
   } = req.body;
 
   try {
-    const existingPackage = await AddressbookBillingModel.findOne({ user_id });
-    // Create a new instance of AdvisorpackageModel
-    if (!existingPackage) {
-      const newPackage = new AddressbookBillingModel({
-        billingfirstName,
-        billinglastName,
-        billingcountry,
-        billingstreetAddress,
-        billingcity,
-        billingstate,
-        billingzipcode,
-        billingphone,
-        billingemail,
-        user_id,
-      });
+    // Har baar naya billing address create karo
+    const newBilling = new AddressbookBillingModel({
+      billingfirstName,
+      billinglastName,
+      billingcountry,
+      billingstreetAddress,
+      billingcity,
+      billingstate,
+      billingzipcode,
+      billingphone,
+      billingemail,
+      user_id,
+    });
 
-      // Save the package to the database
-      await newPackage.save();
+    await newBilling.save();
 
-      // Update the user's packages array
-      await RegisterclientModal.findByIdAndUpdate(
-        user_id,
-        { $push: { addressbookbilling: newPackage._id } },
-        { new: true }
-      );
-    } else {
-      await AddressbookBillingModel.findOneAndUpdate(
-        { user_id },
-        {
-          billingfirstName,
-          billinglastName,
-          billingcountry,
-          billingstreetAddress,
-          billingcity,
-          billingstate,
-          billingzipcode,
-          billingphone,
-          billingemail,
-        },
-        { new: true }
-      );
-    }
+    // User ke billing array me push karo
+    await RegisterclientModal.findByIdAndUpdate(
+      user_id,
+      { $push: { addressbookbilling: newBilling._id } },
+      { new: true }
+    );
 
-    // Send a success response
-    res.send("Billing Address Created");
+    res.send("New Billing Address Created");
   } catch (error) {
-    console.log(error);
+    console.error("Failed to create billing address:", error);
     res.status(500).send("Internal Server Error");
   }
 });
+
+// Create a new shipping address (allows multiples per user)
 server.post("/addressbookshipping", async (req, res) => {
   const {
     shippingfirstName,
@@ -1523,65 +1506,77 @@ server.post("/addressbookshipping", async (req, res) => {
   } = req.body;
 
   try {
-    const existingPackage = await AddressBookShippingModel.findOne({ user_id });
+    // 1️⃣ Always create a new AddressBookShippingModel entry
+    const newShipping = new AddressBookShippingModel({
+      shippingfirstName,
+      shippinglastName,
+      shippingcountry,
+      shippingstreetAddress,
+      shippingcity,
+      shippingstate,
+      shippingzipcode,
+      shippingphone,
+      user_id,
+    });
 
-    if (!existingPackage) {
-      // Create a new instance of AdvisorpackageModel
-      const newPackage = new AddressBookShippingModel({
-        shippingfirstName,
-        shippinglastName,
-        shippingcountry,
-        shippingstreetAddress,
-        shippingcity,
-        shippingstate,
-        shippingzipcode,
-        shippingphone,
-        user_id,
-      });
+    await newShipping.save();
 
-      // Save the package to the database
-      await newPackage.save();
+    // 2️⃣ Push the new address ID into the user's shipping address array
+    await RegisterclientModal.findByIdAndUpdate(
+      user_id,
+      { $push: { addressbookShipping: newShipping._id } },
+      { new: true }
+    );
 
-      // Update the user's packages array
-      await RegisterclientModal.findByIdAndUpdate(
-        user_id,
-        { $push: { addressbookShipping: newPackage._id } },
-        { new: true }
-      );
-    } else {
-      await AddressBookShippingModel.findOneAndUpdate(
-        { user_id },
-        {
-          shippingfirstName,
-          shippinglastName,
-          shippingcountry,
-          shippingstreetAddress,
-          shippingcity,
-          shippingstate,
-          shippingzipcode,
-          shippingphone,
-        },
-        { new: true }
-      );
-    }
-    // Send a success response
-    res.send("Shipping Address Created/updated");
+    // 3️⃣ Return the newly created address
+    res.status(201).json({
+      message: "Shipping address created successfully",
+      shippingAddress: newShipping,
+    });
   } catch (error) {
-    console.log(error);
+    console.error("Error in /addressbookshipping:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+
+// Get all shipping addresses for a given user
+server.get("/addressbookshipping/:user_id", async (req, res) => {
+  try {
+    const list = await AddressBookShippingModel.find({
+      user_id: req.params.user_id,
+    });
+    res.json({ addressbookShipping: list });
+  } catch (err) {
+    console.error(err);
     res.status(500).send("Internal Server Error");
   }
 });
+
+// Update a specific shipping address by its ID
+server.put("/addressbookshipping/:id", async (req, res) => {
+  try {
+    const updated = await AddressBookShippingModel.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
 // Client all created Address Book Details
 server.get("/addressbookbilling/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const data = await RegisterclientModal.findById(id).populate(
-      "addressbookbilling"
-    );
+    const data = await AddressbookBillingModel.find({ user_id: id });
     res.send(data);
   } catch (error) {
     console.log(error);
-    res.send(error);
+    res.status(500).send("Internal Server Error");
   }
 });
 // Client all created Address Book Details
@@ -1696,116 +1691,157 @@ server.delete("/addressbookshipping/:id", async (req, res) => {
   }
 });
 
-//Order Section For Client
-// Create Order Client populate
-server.post("/order", async (req, res) => {
-  const {
-    image,
-    title,
-    price,
-    qty,
-    billing,
-    shipping,
-    product_id,
-    user,
-    user_id,
-    ip,
-    createdDate,
-    status,
-    totalpay,
-  } = req.body;
+// //Order Section For Client
+// // Create Order Client populate
+// server.post("/order", async (req, res) => {
+//   const {
+//     image,
+//     title,
+//     price,
+//     qty,
+//     billing,
+//     shipping,
+//     product_id,
+//     user,
+//     user_id,
+//     ip,
+//     createdDate,
+//     status,
+//     totalpay,
+//   } = req.body;
 
-  try {
-    // Create a new instance of AdvisorpackageModel
-    const newPackage = new OrderModal({
-      image,
-      title,
-      price,
-      qty,
-      billing,
-      shipping,
-      product_id,
-      user,
-      user_id,
-      ip,
-      createdDate,
-      status,
-      totalpay,
-    });
+//   try {
+//     // Create a new instance of AdvisorpackageModel
+//     const newPackage = new OrderModal({
+//       image,
+//       title,
+//       price,
+//       qty,
+//       billing,
+//       shipping,
+//       product_id,
+//       user,
+//       user_id,
+//       ip,
+//       createdDate,
+//       status,
+//       totalpay,
+//     });
 
-    // Save the package to the database
-    await newPackage.save();
+//     // Save the package to the database
+//     await newPackage.save();
 
-    // Update the user's packages array
-    await RegisterclientModal.findByIdAndUpdate(
-      user_id,
-      { $push: { order: newPackage._id } },
-      { new: true }
-    );
+//     // Update the user's packages array
+//     await RegisterclientModal.findByIdAndUpdate(
+//       user_id,
+//       { $push: { order: newPackage._id } },
+//       { new: true }
+//     );
 
-    // Send a success response
-    res.send("order placed");
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-//Update order
-server.put("/order/:orderId", async (req, res) => {
-  const orderId = req.params.orderId;
-  const { status } = req.body;
+//     // Send a success response
+//     res.send("order placed");
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).send("Internal Server Error");
+//   }
+// });
+// //Update order
+// server.put("/order/:orderId", async (req, res) => {
+//   const orderId = req.params.orderId;
+//   const { status } = req.body;
 
-  try {
-    // Update the status field in the existing document
-    const updatedOrder = await OrderModal.findByIdAndUpdate(
-      orderId,
-      { $set: { status: status } },
-      { new: true }
-    );
+//   try {
+//     // Update the status field in the existing document
+//     const updatedOrder = await OrderModal.findByIdAndUpdate(
+//       orderId,
+//       { $set: { status: status } },
+//       { new: true }
+//     );
 
-    if (!updatedOrder) {
-      return res.status(404).send("Order not found");
-    }
+//     if (!updatedOrder) {
+//       return res.status(404).send("Order not found");
+//     }
 
-    // Send the updated order as a response
-    res.json(updatedOrder);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-//Populate Order for client
-server.get("/order/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    const data = await RegisterclientModal.findById(id).populate("order");
-    res.send(data);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-// Get all orders
-server.get("/order", async (req, res) => {
-  try {
-    const data = await OrderModal.find();
-    res.send(data);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
-// Get order by order id
-server.get("/specific-order/:id", async (req, res) => {
-  const { id } = req.params;
-  try {
-    const data = await OrderModal.findById(id);
-    res.send(data);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send("Internal Server Error");
-  }
-});
+//     // Send the updated order as a response
+//     res.json(updatedOrder);
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).send("Internal Server Error");
+//   }
+// });
+// //Populate Order for client
+// server.get("/order/:id", async (req, res) => {
+//   const { id } = req.params;
+//   try {
+//     const data = await RegisterclientModal.findById(id).populate("order");
+//     res.send(data);
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).send("Internal Server Error");
+//   }
+// });
+// // Get all orders
+// server.get("/order", async (req, res) => {
+//   try {
+//     const data = await OrderModal.find();
+//     res.send(data);
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).send("Internal Server Error");
+//   }
+// });
+// // Get order by order id
+// server.get("/specific-order/:id", async (req, res) => {
+//   const { id } = req.params;
+//   try {
+//     const data = await OrderModal.findById(id);
+//     res.send(data);
+//   } catch (error) {
+//     console.log(error);
+//     res.status(500).send("Internal Server Error");
+//   }
+// });
+
+// —————————————————————————————————————————————
+// 1. Create a new order (from client/cart)
+// POST /order
+// body: { paymentMethod, shippingAddress, billingAddress?, paymentStatus? }
+// —————————————————————————————————————————————
+server.post("/order", orderController.createOrder);
+
+// —————————————————————————————————————————————
+// 2. Update an order’s status (admin or webhook)
+// PUT /order/:orderId
+// body: { orderStatus }
+// —————————————————————————————————————————————
+server.put("/order/:orderId", orderController.updateOrderStatus);
+
+// —————————————————————————————————————————————
+// 3. Get all orders for a given user
+// GET /order/:id
+// Here “:id” is the user’s ObjectId
+// —————————————————————————————————————————————
+server.get("/order/:id", orderController.getUserOrders);
+
+// —————————————————————————————————————————————
+// 4. Get all orders in the system
+// GET /order
+// —————————————————————————————————————————————
+server.get("/order", userAuth, orderController.getOrder);
+
+// —————————————————————————————————————————————
+// 5. Get a single order by its orderNumber or _id
+// GET /specific-order/:id
+// —————————————————————————————————————————————
+server.get("/specific-order/:id", orderController.getOrderById);
+
+// —————————————————————————————————————————————
+// 6. (Optional) ShipStation “Custom Store” endpoints
+//    a) Export orders pull:    GET  /shipstation?action=export&…
+//    b) Shipment notification:  POST /shipstation?action=shipnotify
+// —————————————————————————————————————————————
+server.get("/shipstation", orderController.exportOrders);
+server.post("/shipstation", orderController.shipNotify);
 
 //Wishlist Section For Client
 // Create Wishlist Client populate
@@ -1847,6 +1883,7 @@ server.get("/get-user-cart", userAuth, async (req, res) => {
   try {
     // Fetch the user's cart (wishlist) based on their user ID
     const userCart = await WishlistModal.find({ user_id: userId });
+    console.log(userCart);
 
     // Check if the cart exists
     if (!userCart || userCart.length === 0) {
@@ -1855,7 +1892,9 @@ server.get("/get-user-cart", userAuth, async (req, res) => {
 
     // Group products by product_id and sum quantities
     const groupedCart = userCart.reduce((acc, item) => {
-      const existingItem = acc.find(cartItem => cartItem.product_id === item.product_id);
+      const existingItem = acc.find(
+        (cartItem) => cartItem.product_id === item.product_id
+      );
       if (existingItem) {
         existingItem.qty += item.qty; // Combine the quantities if the product already exists
       } else {
@@ -1875,11 +1914,69 @@ server.get("/get-user-cart", userAuth, async (req, res) => {
   }
 });
 
+server.post("/shipping/estimate", async (req, res) => {
+  const { to, weightOunces } = req.body;
+  if (!to || typeof weightOunces !== "number") {
+    return res
+      .status(400)
+      .json({ error: "Missing or invalid `to` or `weightOunces`" });
+  }
+
+  try {
+    const apiKey = process.env.SS_API_KEY; // your V2 API Key :contentReference[oaicite:1]{index=1}
+
+    // Build the V2 /v2/rates/estimate payload :contentReference[oaicite:2]{index=2}
+    const payload = {
+      carrier_id: process.env.SS_CARRIER_ID, // restrict to your connected carrier (optional)
+      from_country_code: process.env.SS_FROM_COUNTRY,
+      from_postal_code: process.env.SS_FROM_ZIP,
+      from_city_locality: process.env.SS_FROM_CITY,
+      from_state_province: process.env.SS_FROM_STATE,
+
+      to_country_code: to.shippingcountry,
+      to_postal_code: to.shippingzipcode,
+      to_city_locality: to.shippingcity,
+      to_state_province: to.shippingstate,
+
+      weight: {
+        value: weightOunces,
+        unit: "ounce", // one of "ounce"|"pound"|"gram"|"kilogram" :contentReference[oaicite:3]{index=3}
+      },
+      confirmation: "none",
+      address_residential_indicator: "no",
+    };
+
+    // Call ShipStation V2 Rates Estimate :contentReference[oaicite:4]{index=4}
+    const shipRes = await axios.post(
+      "https://api.shipstation.com/v2/rates/estimate",
+      payload,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "API-Key": apiKey,
+        },
+      }
+    );
+
+    // Pick the first quote’s shipping_amount.amount :contentReference[oaicite:5]{index=5}
+    const rates = shipRes.data || [];
+    const estimatedCost = rates.length ? rates[0].shipping_amount.amount : 0;
+
+    return res.json({ estimatedCost });
+  } catch (err) {
+    console.error("Rate estimate failed:", err.response?.data || err.message);
+    return res
+      .status(err.response?.status || 500)
+      .json({ error: err.message, details: err.response?.data || [] });
+  }
+});
 
 //Populate Order for client
 server.get("/wishlist/:id", userAuth, async (req, res) => {
   try {
-    const data = await RegisterclientModal.findOne({user_id: req.rootUser._id}).populate("wishlist");
+    const data = await RegisterclientModal.findOne({
+      user_id: req.rootUser._id,
+    }).populate("wishlist");
     res.send(data);
   } catch (error) {
     console.log(error);
@@ -2075,7 +2172,7 @@ server.delete("/feature-products/:id", async (req, res) => {
 });
 
 server.put("/feature-products/:id", async (req, res) => {
- const productId = req.params.id;
+  const productId = req.params.id;
   const { image, ...updateData } = req.body; // Extract images separately
 
   try {
@@ -2108,7 +2205,9 @@ server.get("/products/category/:category", async (req, res) => {
     const limit = parseInt(req.query.limit) || 10; // Default limit to 10 if not provided
     const products = await FeaturedpoductModal.find({ category }).limit(limit);
     if (!products.length) {
-      return res.status(404).json({ message: "No products found in this category" });
+      return res
+        .status(404)
+        .json({ message: "No products found in this category" });
     }
     res.status(200).json(products);
   } catch (error) {
@@ -2130,13 +2229,15 @@ server.get("/user/profile", userAuth, async (req, res) => {
       phone,
     });
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch user profile", details: err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch user profile", details: err.message });
   }
 });
 
 //new mvc routes
 server.use("/api", bannerRoutes);
-server.use("/api",categoryRoutes);
+server.use("/api", categoryRoutes);
 server.use("/api", topCategoryRoutes);
 server.use("/api", cartRoutes);
 server.use("/api", orderRoutes);
