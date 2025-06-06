@@ -94,6 +94,8 @@ exports.createOrder = async (req, res) => {
       name: p.productTitle,
       quantity: p.quantity,
       unitPrice: p.price,
+      size: p.size || "",  // assuming size is optional
+      weight: p.weight || 0, // assuming weight is optional
       options: p.options || {},
       location: p.location || ""
     }));

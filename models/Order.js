@@ -23,6 +23,8 @@ const itemSchema = new mongoose.Schema(
   {
     sku: { type: String, required: true },
     name: { type: String, required: true },
+    size: { type: String, required: true, }, // e.g. "M", "L", "XL"
+    weight: { type: Number, required: true, }, // e.g. "M", "L", "XL"
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true },
     options: { type: Map, of: String },
