@@ -2090,8 +2090,10 @@ server.post("/feature-products", async (req, res) => {
     description,
     category,
     price,
+    weight,
     stock,
     year,
+    size,
     cutting,
     grade,
     region,
@@ -2101,6 +2103,7 @@ server.post("/feature-products", async (req, res) => {
     texture,
     steamSize,
   } = req.body;
+  console.log(size);
 
   try {
     // Create a new instance of AdvisorpackageModel
@@ -2111,6 +2114,8 @@ server.post("/feature-products", async (req, res) => {
       category,
       price,
       stock,
+      size,
+      weight,
       year,
       cutting,
       grade,

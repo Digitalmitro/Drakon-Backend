@@ -18,19 +18,23 @@ const cartSchema = new mongoose.Schema({
         required: true,
         min: 1,
       },
+      size: {
+        type: String,
+        required: true,
+      },
       price: {
         type: Number,
         required: true,
       },
       total: {
         type: Number,
-      
+
       },
     },
   ],
   subtotal: {
     type: Number,
-  
+
     default: 0,
   },
   shippingCost: {
@@ -43,7 +47,7 @@ const cartSchema = new mongoose.Schema({
   },
   totalAmount: {
     type: Number,
-   
+
   },
   createdAt: {
     type: Date,

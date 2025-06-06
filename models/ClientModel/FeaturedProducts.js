@@ -23,17 +23,19 @@ const featuredproductsSchema = mongoose.Schema({
     type: Number,
     required: true,
   },
+  size: {
+    type: [String],
+    required: true,
+  },
+  weight: {
+    type: Number, // unit: ounces
+    required: true,
+  },
   stock: {
     type: Number,
     required: true,
   },
-  // review: [
-  //   {
-  //     email: { type: String, unique: true },
-  //     rating: { type: Number },
-  //     comments: { type: String },
-  //   },
-  // ],
+
   createdDate: {
     type: Date,
     default: Date.now(),
