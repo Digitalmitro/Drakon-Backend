@@ -5,6 +5,7 @@ const { FeaturedpoductModal } = require("../models/ClientModel/FeaturedProducts"
 exports.addToCart = async (req, res) => {
   try {
     const { userId, productId, quantity, size } = req.body;
+
     const product = await FeaturedpoductModal.findById(productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
