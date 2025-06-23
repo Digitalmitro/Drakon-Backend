@@ -2,10 +2,12 @@ const stripe = require("../config/stripeConfig");
 const Order = require("../models/Order");
 
 exports.createPaymentIntent = async (req, res) => {
+
   try {
     const { amount } = req.body; // Amount in cents
 
     const session = await stripe.checkout.sessions.create({
+
       payment_method_types: ["card"],
       line_items: [
         {
