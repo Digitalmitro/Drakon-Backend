@@ -22,8 +22,8 @@ exports.createPaymentIntent = async (req, res) => {
         },
       ],
       mode: "payment",
-      success_url: `${process.env.ORIGIN_URL}checkout?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: "https://h4snptx0-5173.inc1.devtunnels.ms/cart?canceled=true",
+      success_url: `${process.env.ORIGIN_URL}/checkout?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: "${process.env.ORIGIN_URL}/cart?canceled=true",
     });
 
     res.json({ sessionId: session.id });
@@ -34,22 +34,26 @@ exports.createPaymentIntent = async (req, res) => {
 
 exports.sucessfullPayment = async (req, res) => {
   const { sessionId } = req.body;
-  if (!sessionId) return res.status(401).json({ message: "unauth" });
+  if (!sessionId)
+    return res.status(401).json({ message: "Unauthorized" });
+
   try {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     if (session.payment_status !== "paid") {
-      res.status(200).json({ message: "Order Not saved!" });
+      // Early return so we don't fall through to the success response
+      return res
+        .status(400)
+        .json({ message: "Order Not saved! Payment not completed." });
     }
 
-    return res
-      .status(200)
-      .json({
-        message: "Payment  successful",
-        session: session.payment_status,
-      });
+    // Only runs if payment_status === "paid"
+    return res.status(200).json({
+      message: "Payment successful",
+      payment_status: session.payment_status,
+    });
   } catch (err) {
     console.error("Error confirming order:", err);
-    res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Server error" });
   }
 };
