@@ -34,7 +34,7 @@ exports.createOrder = async (req, res) => {
     // 1) Determine if there’s an authenticated user
     const userIdFromToken = req.rootUser?._id || null;
     let cartItems, subtotal, shippingCost, discount, totalAmount;
-
+    // console.log(userIdFromToken);
     if (userIdFromToken) {
       // ── Authenticated user: look up their Cart in the DB ──
       const cart = await Cart.findOne({ userId: userIdFromToken });
@@ -89,16 +89,25 @@ exports.createOrder = async (req, res) => {
 
     // 4) Build the “items” array in the shape our Order schema wants
     //    (same for both user‐cart and guest‐cart)
-    const itemsForOrder = cartItems.map((p) => ({
-      sku: p.productId.toString(),
-      name: p.productTitle,
-      quantity: p.quantity,
-      unitPrice: p.price,
-      size: p.size || "",  // assuming size is optional
-      weight: p.weight || 0, // assuming weight is optional
-      options: p.options || {},
-      location: p.location || ""
-    }));
+
+
+    const itemsForOrder = cartItems.map((p, idx) => {
+      if (!p.name) {
+        throw new Error(`Item #${idx + 1} is missing a name`);
+      }
+      const name = p.name
+      const size = p.size || p.productId?.size || "One Size";
+      return {
+        sku: p.productId.toString(),
+        name,
+        size,
+        weight: p.weight || p.productId?.weight || 0,
+        quantity: p.quantity,
+        unitPrice: p.price,
+        options: p.options || {},
+        location: p.location || "",
+      };
+    });
 
     // 5) Construct the new Order document
     const newOrder = new Order({
