@@ -23,7 +23,7 @@ exports.createPaymentIntent = async (req, res) => {
       ],
       mode: "payment",
       success_url: `${process.env.ORIGIN_URL}/checkout?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: "${process.env.ORIGIN_URL}/cart?canceled=true",
+      cancel_url: `${process.env.ORIGIN_URL}/cart?canceled=true`,
     });
 
     res.json({ sessionId: session.id });
