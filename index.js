@@ -369,7 +369,7 @@ server.get("/getalladmin", async (req, res) => {
 
 //PRODUCTS SECTION
 server.post("/products", async (req, res) => {
-  const { image, title, description, category, price, stock, review } =
+  const { image, title, description, category, price, stock, review, size, weight } =
     req.body;
 
   try {
@@ -382,6 +382,8 @@ server.post("/products", async (req, res) => {
       price,
       stock,
       review,
+      size,
+      weight,
     });
     // Save the package to the database
     await newPackage.save();

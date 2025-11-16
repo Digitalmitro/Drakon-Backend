@@ -31,6 +31,14 @@ const productsSchema = mongoose.Schema({
     type: Number,
     required: true,
   },
+  size: {
+    type: [String],
+    required: false,
+  },
+  weight: {
+    type: Number,
+    required: false,
+  },
   review: [
     {
       email: { type: String },
