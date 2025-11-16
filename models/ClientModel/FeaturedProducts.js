@@ -31,6 +31,10 @@ const featuredproductsSchema = mongoose.Schema({
     type: Number, // unit: ounces
     required: true,
   },
+  upc: {
+    type: String,
+    required: false,
+  },
   stock: {
     type: Number,
     required: true,

@@ -39,6 +39,10 @@ const productsSchema = mongoose.Schema({
     type: Number,
     required: false,
   },
+  upc: {
+    type: String,
+    required: false,
+  },
   review: [
     {
       email: { type: String },
