@@ -7,13 +7,14 @@ const updateProductSizing = async () => {
     await mongoose.connect(process.env.MONGO_URI);
     console.log("Connected to MongoDB");
 
-    // Update products with category "Equipment" and titles containing "Sliding mitt" or "elbow guard"
+    // Update products with category "Equipment" and titles containing "Sliding mitt", "elbow guard", or "shin guard"
     const result = await FeaturedpoductModal.updateMany(
       {
         category: { $regex: /equipment/i },
         $or: [
           { title: { $regex: /Sliding Mitt/i } },
-          { title: { $regex: /Elbow guard/i } }
+          { title: { $regex: /Elbow guard/i } },
+          { title: { $regex: /Shin guard/i } }
         ],
         $or: [
           { size: { $exists: false } },
@@ -34,7 +35,8 @@ const updateProductSizing = async () => {
       category: { $regex: /equipment/i },
       $or: [
         { title: { $regex: /Sliding Mitt/i } },
-        { title: { $regex: /Elbow guard/i } }
+        { title: { $regex: /Elbow guard/i } },
+        { title: { $regex: /Shin guard/i } }
       ]
     });
 
