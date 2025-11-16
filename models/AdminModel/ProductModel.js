@@ -43,6 +43,14 @@ const productsSchema = mongoose.Schema({
     type: String,
     required: false,
   },
+  isSoldOut: {
+    type: Boolean,
+    default: false,
+  },
+  soldOutSizes: {
+    type: [String],
+    default: [],
+  },
   review: [
     {
       email: { type: String },

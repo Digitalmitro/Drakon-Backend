@@ -39,6 +39,14 @@ const featuredproductsSchema = mongoose.Schema({
     type: Number,
     required: true,
   },
+  isSoldOut: {
+    type: Boolean,
+    default: false,
+  },
+  soldOutSizes: {
+    type: [String],
+    default: [],
+  },
 
   createdDate: {
     type: Date,
