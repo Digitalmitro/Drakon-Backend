@@ -613,14 +613,50 @@ server.post("/coupon", async (req, res) => {
     res.status(500).send("Internal Server Error");
   }
 });
-// ADMIN all created Coupon
-server.get("/coupon", async (req, res) => {
+// ADMIN all created Coupon (Protected - Admin Only)
+server.get("/coupon", adminAuth, async (req, res) => {
   try {
     const data = await CouponModel.find();
     res.send(data);
   } catch (error) {
     console.log(error);
     res.send(error);
+  }
+});
+
+// PUBLIC - Validate Coupon Code (Secure - doesn't expose all coupons)
+server.post("/coupon/validate", async (req, res) => {
+  try {
+    const { couponCode } = req.body;
+    
+    if (!couponCode) {
+      return res.status(400).json({ valid: false, message: "Coupon code is required" });
+    }
+
+    // Find coupon by code
+    const coupon = await CouponModel.findOne({ 
+      couponName: couponCode,
+      status: "Active"
+    });
+
+    if (!coupon) {
+      return res.json({ valid: false, message: "Invalid coupon code" });
+    }
+
+    // Check if expired
+    if (coupon.expiryDate && new Date(coupon.expiryDate) < new Date()) {
+      return res.json({ valid: false, message: "Coupon has expired" });
+    }
+
+    // Return only necessary information
+    res.json({
+      valid: true,
+      discount: coupon.discount,
+      message: "Coupon applied successfully"
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ valid: false, message: "Error validating coupon" });
   }
 });
 
