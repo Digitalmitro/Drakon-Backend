@@ -1954,6 +1954,124 @@ server.get("/get-user-cart", userAuth, async (req, res) => {
   }
 });
 
+// New ShipStation-based shipping estimate endpoint - returns shipping options per item
+server.post("/shipping/estimate-v2", async (req, res) => {
+  const { to, items } = req.body;
+  
+  if (!to || !Array.isArray(items) || items.length === 0) {
+    return res
+      .status(400)
+      .json({ error: "Missing or invalid `to` address or `items` array" });
+  }
+
+  try {
+    const shipstationService = require('./services/shipstationService');
+    
+    // Get shipping rates for each item individually
+    const itemShippingOptions = await Promise.all(
+      items.map(async (item) => {
+        try {
+          // Fetch product details from ShipStation using UPC
+          let productInfo;
+          try {
+            productInfo = await shipstationService.getProductByUPC(item.upc);
+          } catch (error) {
+            console.log(`Product not found in ShipStation for UPC ${item.upc}, using defaults`);
+            // Use default dimensions if product not found in ShipStation
+            productInfo = {
+              weightOz: 10,
+              length: 10,
+              width: 8,
+              height: 4
+            };
+          }
+
+          // Prepare shipping parameters for this specific item
+          const shippingParams = {
+            shipTo: {
+              state: to.shippingstate,
+              country: to.shippingcountry || 'US',
+              postalCode: to.shippingzipcode,
+              city: to.shippingcity
+            },
+            shipFrom: {
+              postalCode: process.env.SS_FROM_ZIP || '77328',
+              city: process.env.SS_FROM_CITY || 'Cleveland',
+              state: process.env.SS_FROM_STATE || 'CA',
+              country: 'US'
+            },
+            packageInfo: {
+              weight: (productInfo.weightOz || 10) * item.quantity,
+              length: productInfo.length || 10,
+              width: productInfo.width || 8,
+              height: productInfo.height || 4
+            },
+            carrierCode: 'stamps_com'  // USPS via Stamps.com
+          };
+
+          // Get shipping rates from ShipStation
+          const rates = await shipstationService.getShippingRates(shippingParams);
+
+          // Format rates for frontend
+          const formattedRates = rates.map(r => ({
+            serviceName: r.serviceName,
+            serviceCode: r.serviceCode,
+            cost: parseFloat(((r.shipmentCost || 0) + (r.otherCost || 0)).toFixed(2)),
+            shipmentCost: r.shipmentCost,
+            otherCost: r.otherCost
+          }));
+
+          return {
+            upc: item.upc,
+            quantity: item.quantity,
+            shippingOptions: formattedRates,
+            // Default to cheapest option
+            defaultOption: formattedRates.length > 0 ? formattedRates[0].serviceCode : null
+          };
+        } catch (itemError) {
+          console.error(`Error getting rates for UPC ${item.upc}:`, itemError.message);
+          // Return fallback for this item
+          return {
+            upc: item.upc,
+            quantity: item.quantity,
+            shippingOptions: [{
+              serviceName: 'Standard Shipping',
+              serviceCode: 'standard',
+              cost: 6.99
+            }],
+            defaultOption: 'standard',
+            error: itemError.message
+          };
+        }
+      })
+    );
+
+    return res.json({ 
+      items: itemShippingOptions
+    });
+  } catch (err) {
+    console.error("Rate estimate failed:", err.message);
+    
+    // Fallback to basic calculation if entire request fails
+    const fallbackItems = items.map(item => ({
+      upc: item.upc,
+      quantity: item.quantity,
+      shippingOptions: [{
+        serviceName: 'Standard Shipping',
+        serviceCode: 'standard',
+        cost: 6.99
+      }],
+      defaultOption: 'standard',
+      fallback: true
+    }));
+    
+    return res.json({ 
+      items: fallbackItems,
+      error: err.message
+    });
+  }
+});
+
 server.post("/shipping/estimate", async (req, res) => {
   const { to, weightOunces } = req.body;
   if (!to || typeof weightOunces !== "number") {
@@ -2004,10 +2122,16 @@ server.post("/shipping/estimate", async (req, res) => {
 
     return res.json({ estimatedCost });
   } catch (err) {
-    console.error("Rate estimate failed:", err.response?.data || err.message);
-    return res
-      .status(err.response?.status || 500)
-      .json({ error: err.message, details: err.response?.data || [] });
+    console.error("Rate estimate failed:", err.message);
+    
+    // Fallback to basic calculation if ShipStation fails
+    const fallbackCost = 6.99; // Default shipping cost
+    
+    return res.json({ 
+      estimatedCost: fallbackCost,
+      fallback: true,
+      error: err.message
+    });
   }
 });
 

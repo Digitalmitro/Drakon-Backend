@@ -9,13 +9,25 @@ exports.addToCart = async (req, res) => {
     const product = await FeaturedpoductModal.findById(productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
+    // Extract UPC based on selected size or product-level UPC
+    let upc = '';
+    if (size && product.size && Array.isArray(product.size)) {
+      const sizeData = product.size.find(s => s.size === size);
+      upc = sizeData?.upc || product.upc || '';
+    } else {
+      upc = product.upc || '';
+    }
+
     let cart = await Cart.findOne({ userId });
 
     if (!cart) {
-      cart = new Cart({ userId, products: [], subtotal: 0, totalAmount: 0, size });
+      cart = new Cart({ userId, products: [], subtotal: 0, totalAmount: 0 });
     }
 
-    const existingProduct = cart.products.find(p => p.productId.toString() === productId);
+    const existingProduct = cart.products.find(p => 
+      p.productId.toString() === productId && p.size === size
+    );
+    
     if (existingProduct) {
       existingProduct.quantity += quantity;
       existingProduct.total = existingProduct.quantity * product.price;
@@ -26,6 +38,7 @@ exports.addToCart = async (req, res) => {
         price: product.price,
         total: product.price * quantity,
         size,
+        upc,
       });
     }
 
@@ -35,6 +48,7 @@ exports.addToCart = async (req, res) => {
     await cart.save();
     res.status(200).json(cart);
   } catch (error) {
+    console.error('Add to cart error:', error);
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -43,10 +57,22 @@ exports.addToCart = async (req, res) => {
 exports.getCart = async (req, res) => {
   try {
     const userId = req.rootUser._id;
-    const cart = await Cart.findOne({ userId }).populate("products.productId", "title price image stock");
+    const cart = await Cart.findOne({ userId }).populate({
+      path: "products.productId",
+      select: "title price image stock"
+    });
+    
     if (!cart) return res.status(404).json({ message: "Cart is empty" });
+    
+    console.log('Cart products with UPC:', cart.products.map(p => ({
+      size: p.size,
+      upc: p.upc,
+      productId: p.productId?._id
+    }))); // Debug log
+    
     res.status(200).json(cart);
   } catch (error) {
+    console.error('Get cart error:', error);
     res.status(500).json({ error: "Server error" });
   }
 };

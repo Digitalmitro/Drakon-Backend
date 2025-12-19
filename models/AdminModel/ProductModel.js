@@ -32,15 +32,26 @@ const productsSchema = mongoose.Schema({
     required: true,
   },
   size: {
-    type: [String],
+    type: [
+      {
+        size: {
+          type: String,
+          required: true,
+        },
+        upc: {
+          type: String,
+          required: false,
+        },
+      },
+    ],
     required: false,
   },
-  weight: {
-    type: Number,
-    required: false,
+  hasNoSize: {
+    type: Boolean,
+    default: false,
   },
   upc: {
-    type: String,
+    type: String, // fallback for products with no size
     required: false,
   },
   isSoldOut: {
