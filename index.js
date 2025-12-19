@@ -524,9 +524,9 @@ server.put("/products/:id", async (req, res) => {
   try {
     const updateQuery = { ...updateData };
 
-    // If new images are provided, push them to the array
+    // If new images are provided, replace the entire array
     if (image) {
-      updateQuery.$push = { image: { $each: image } }; // Append new images
+      updateQuery.image = image; // Replace images instead of appending
     }
 
     const updatedProduct = await ProductsModal.findByIdAndUpdate(
@@ -2349,9 +2349,9 @@ server.put("/feature-products/:id", async (req, res) => {
   try {
     const updateQuery = { ...updateData };
 
-    // If new images are provided, push them to the array
+    // If new images are provided, replace the entire array
     if (image) {
-      updateQuery.$push = { image: { $each: image } }; // Append new images
+      updateQuery.image = image; // Replace images instead of appending
     }
 
     const updatedProduct = await FeaturedpoductModal.findByIdAndUpdate(
