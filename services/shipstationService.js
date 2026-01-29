@@ -6,6 +6,9 @@ const SHIPSTATION_API_SECRET = process.env.SHIPSTATION_API_SECRET;
 
 // Helper to create Basic Auth header
 const getAuthHeader = () => {
+  if (!SHIPSTATION_API_KEY || !SHIPSTATION_API_SECRET) {
+    throw new Error('Missing ShipStation API credentials. Set SHIPSTATION_API_KEY and SHIPSTATION_API_SECRET.');
+  }
   const credentials = Buffer.from(`${SHIPSTATION_API_KEY}:${SHIPSTATION_API_SECRET}`).toString('base64');
   return `Basic ${credentials}`;
 };
@@ -17,23 +20,25 @@ const getAuthHeader = () => {
  */
 async function getProductByUPC(upc) {
   try {
+    const authHeader = getAuthHeader();
+    console.log(authHeader);
     const response = await axios.get(`${SHIPSTATION_API_URL}/products`, {
       headers: {
-        'Authorization': getAuthHeader(),
+        'Authorization': authHeader,
         'Content-Type': 'application/json'
       },
       params: {
         upc: upc  // Search by UPC parameter
       }
     });
-
+    console.log(`ShipStation product lookup response for UPC ${upc}:`, response.data);
     if (response.data && response.data.products && response.data.products.length > 0) {
       return response.data.products[0];
     }
     
     throw new Error(`Product not found in ShipStation for UPC: ${upc}`);
   } catch (error) {
-    console.error(`Error fetching product from ShipStation (UPC: ${upc}):`, error.message);
+    console.error(error.response?.data || error.message);
     throw error;
   }
 }
@@ -106,5 +111,48 @@ async function getShippingRates({ shipTo, shipFrom, packageInfo, carrierCode = '
 
 module.exports = {
   getProductByUPC,
-  getShippingRates
+  getShippingRates,
+  getAllProducts
 };
+
+/**
+ * List products from ShipStation (SSAPI v1)
+ * Will page through results until no more products or safety limit reached.
+ * @param {Object} options
+ * @param {number} options.pageSize
+ */
+async function getAllProducts({ pageSize = 100 } = {}) {
+  try {
+    const authHeader = getAuthHeader();
+    let page = 1;
+    const all = [];
+
+    // Loop and accumulate pages. Safety cap to avoid infinite loops.
+    while (page <= 50) {
+      const response = await axios.get(`${SHIPSTATION_API_URL}/products`, {
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json'
+        },
+        params: {
+          page,
+          pageSize
+        }
+      });
+
+      const items = response.data && (response.data.products || response.data);
+      if (!items || items.length === 0) break;
+
+      all.push(...items);
+
+      // If fewer than pageSize returned, we've reached the last page
+      if (items.length < pageSize) break;
+      page += 1;
+    }
+
+    return all;
+  } catch (error) {
+    console.error('Error listing ShipStation products:', error.response?.data || error.message || error);
+    throw error;
+  }
+}

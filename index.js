@@ -66,8 +66,11 @@ const cartRoutes = require("./routes/cartRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const stripeRoutes = require("./routes/stripeRoutes");
 const blogRoutes = require("./routes/blogRoutes");
+const shipstationRoutes = require("./routes/shipstationRoutes");
 const { default: axios } = require("axios");
 connection();
+// Mount ShipStation custom store endpoints under /api/shipstation
+server.use('/api/shipstation', shipstationRoutes);
 
 //welcome
 server.get("/", (req, res) => {

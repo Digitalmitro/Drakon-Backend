@@ -344,8 +344,8 @@ exports.exportOrders = async (req, res) => {
     bill.ele("Company").txt(o.billTo.company || "");
     bill.ele("Phone").txt(o.billTo.phone || "");
     bill.ele("Email").txt(o.billTo.email || "");
-    bill.ele("Address1").txt(o.billTo.address1 || "");
-    bill.ele("Address2").txt(o.billTo.address2 || "");
+    bill.ele("Street1").txt(o.billTo.address1 || "");
+    bill.ele("Street2").txt(o.billTo.address2 || "");
     bill.ele("City").txt(o.billTo.city || "");
     bill.ele("State").txt(o.billTo.state || "");
     bill.ele("PostalCode").txt(o.billTo.postalCode || "");
@@ -355,8 +355,8 @@ exports.exportOrders = async (req, res) => {
     const ship = cust.ele("ShipTo");
     ship.ele("Name").txt(o.shipTo.fullName || "");
     ship.ele("Company").txt(o.shipTo.company || "");
-    ship.ele("Address1").txt(o.shipTo.address1 || "");
-    ship.ele("Address2").txt(o.shipTo.address2 || "");
+    ship.ele("Street1").txt(o.shipTo.address1 || "");
+    ship.ele("Street2").txt(o.shipTo.address2 || "");
     ship.ele("City").txt(o.shipTo.city || "");
     ship.ele("State").txt(o.shipTo.state || "");
     ship.ele("PostalCode").txt(o.shipTo.postalCode || "");
