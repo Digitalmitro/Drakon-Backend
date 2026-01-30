@@ -24,6 +24,17 @@ function mapStatus(internal) {
   return 'unpaid';
 }
 
+// Format date for ShipStation XML: remove milliseconds and trailing Z
+function formatDateForShipstation(d) {
+  if (!d) return '';
+  try {
+    const iso = new Date(d).toISOString();
+    // Remove fractional seconds and trailing Z, e.g. 2025-06-01T08:54:17.888Z -> 2025-06-01T08:54:17
+    return iso.replace(/\.\d+Z$/, '');
+  } catch (err) {
+    return '';
+  }
+}
 // GET /api/shipstation/orders
 async function getOrdersForShipstation(req, res) {
   try {
@@ -57,8 +68,8 @@ async function getOrdersForShipstation(req, res) {
     for (const o of orders) {
       const orderId = escapeXml(o._id || '');
       const orderNumber = escapeXml(o.orderNumber || o._id || '');
-      const orderDateIso = o.orderDate ? new Date(o.orderDate).toISOString() : new Date().toISOString();
-      const lastModifiedIso = o.lastModified ? new Date(o.lastModified).toISOString() : orderDateIso;
+      const orderDateIso = o.orderDate ? formatDateForShipstation(o.orderDate) : formatDateForShipstation(new Date());
+      const lastModifiedIso = o.lastModified ? formatDateForShipstation(o.lastModified) : orderDateIso;
       const status = mapStatus(o.orderStatus || o.paymentStatus || o.status);
 
       // Use shipTo from the Order model; fall back to empty fields if missing
