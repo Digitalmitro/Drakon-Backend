@@ -24,14 +24,14 @@ function mapStatus(internal) {
   return 'unpaid';
 }
 
-// Format date for ShipStation XML: remove milliseconds and trailing Z
+// Format date for ShipStation XML: remove milliseconds and timezone
 function formatDateForShipstation(d) {
   if (!d) return '';
   try {
     const iso = new Date(d).toISOString();
-    // Remove fractional seconds and replace trailing Z with +00:00
-    // e.g. 2025-06-01T08:54:17.888Z -> 2025-06-01T08:54:17+00:00
-    return iso.replace(/\.\d+Z$/, '+00:00');
+    // Remove fractional seconds and timezone
+    // e.g. 2025-06-01T08:54:17.888Z -> 2025-06-01T08:54:17
+    return iso.replace(/\.\d+Z$/, '');
   } catch (err) {
     return '';
   }
