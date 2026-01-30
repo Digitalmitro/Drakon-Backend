@@ -24,17 +24,25 @@ function mapStatus(internal) {
   return 'unpaid';
 }
 
-// Format date for ShipStation XML: remove milliseconds and timezone
+// Format date for ShipStation XML: MM/dd/yyyy HH:mm (UTC)
 function formatDateForShipstation(d) {
   if (!d) return '';
   try {
-    const iso = new Date(d).toISOString();
-    // Remove fractional seconds and timezone
-    // e.g. 2025-06-01T08:54:17.888Z -> 2025-06-01T08:54:17
-    return iso.replace(/\.\d+Z$/, '');
+    const dt = new Date(d);
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getUTCDate()).padStart(2, '0');
+    const yyyy = String(dt.getUTCFullYear());
+    const HH = String(dt.getUTCHours()).padStart(2, '0');
+    const MM = String(dt.getUTCMinutes()).padStart(2, '0');
+    return `${mm}/${dd}/${yyyy} ${HH}:${MM}`;
   } catch (err) {
     return '';
   }
+}
+
+function formatMoney(value) {
+  const num = typeof value === 'number' ? value : Number(value || 0);
+  return Number.isFinite(num) ? num.toFixed(2) : '0.00';
 }
 // GET /api/shipstation/orders
 async function getOrdersForShipstation(req, res) {
@@ -73,10 +81,24 @@ async function getOrdersForShipstation(req, res) {
       const lastModifiedIso = o.lastModified ? formatDateForShipstation(o.lastModified) : orderDateIso;
       const status = mapStatus(o.orderStatus || o.paymentStatus || o.status);
 
-      // Use shipTo from the Order model; fall back to empty fields if missing
+      // Use billing and shipping from the Order model
+      const billTo = o.billTo || {
+        fullName: '',
+        company: '',
+        phone: '',
+        email: '',
+        address1: '',
+        address2: '',
+        city: '',
+        state: '',
+        postalCode: '',
+        country: '',
+      };
+
       const shipTo = o.shipTo || {
         fullName: '',
         company: '',
+        phone: '',
         address1: '',
         address2: '',
         city: '',
@@ -93,17 +115,41 @@ async function getOrdersForShipstation(req, res) {
       xmlPieces.push(`    <OrderDate>${escapeXml(orderDateIso)}</OrderDate>`);
       xmlPieces.push(`    <LastModified>${escapeXml(lastModifiedIso)}</LastModified>`);
       xmlPieces.push(`    <OrderStatus>${escapeXml(status)}</OrderStatus>`);
+      xmlPieces.push(`    <OrderTotal>${formatMoney(o.orderTotal)}</OrderTotal>`);
+      xmlPieces.push(`    <ShippingAmount>${formatMoney(o.shippingAmount)}</ShippingAmount>`);
+      xmlPieces.push(`    <TaxAmount>${formatMoney(o.taxAmount)}</TaxAmount>`);
+      xmlPieces.push(`    <ShippingMethod>${escapeXml(o.shippingMethod || '')}</ShippingMethod>`);
+      xmlPieces.push(`    <PaymentMethod>${escapeXml(o.paymentMethod || '')}</PaymentMethod>`);
+      xmlPieces.push(`    <CurrencyCode>${escapeXml(o.currencyCode || 'USD')}</CurrencyCode>`);
 
-      xmlPieces.push('    <ShipTo>');
-      xmlPieces.push(`      <Name>${escapeXml(shipTo.fullName || '')}</Name>`);
-      xmlPieces.push(`      <Company>${escapeXml(shipTo.company || '')}</Company>`);
-      xmlPieces.push(`      <Street1>${escapeXml(shipTo.address1 || '')}</Street1>`);
-      xmlPieces.push(`      <Street2>${escapeXml(shipTo.address2 || '')}</Street2>`);
-      xmlPieces.push(`      <City>${escapeXml(shipTo.city || '')}</City>`);
-      xmlPieces.push(`      <State>${escapeXml(shipTo.state || '')}</State>`);
-      xmlPieces.push(`      <PostalCode>${escapeXml(shipTo.postalCode || shipTo.zip || '')}</PostalCode>`);
-      xmlPieces.push(`      <Country>${escapeXml(shipTo.country || '')}</Country>`);
-      xmlPieces.push('    </ShipTo>');
+      xmlPieces.push('    <Customer>');
+      xmlPieces.push(`      <CustomerCode>${escapeXml(o.customerCode || o.billTo?.email || o.shipTo?.email || o.orderNumber || o._id || '')}</CustomerCode>`);
+
+      xmlPieces.push('      <BillTo>');
+      xmlPieces.push(`        <Name>${escapeXml(billTo.fullName || '')}</Name>`);
+      xmlPieces.push(`        <Company>${escapeXml(billTo.company || '')}</Company>`);
+      xmlPieces.push(`        <Phone>${escapeXml(billTo.phone || '')}</Phone>`);
+      xmlPieces.push(`        <Email>${escapeXml(billTo.email || '')}</Email>`);
+      xmlPieces.push(`        <Address1>${escapeXml(billTo.address1 || '')}</Address1>`);
+      xmlPieces.push(`        <Address2>${escapeXml(billTo.address2 || '')}</Address2>`);
+      xmlPieces.push(`        <City>${escapeXml(billTo.city || '')}</City>`);
+      xmlPieces.push(`        <State>${escapeXml(billTo.state || '')}</State>`);
+      xmlPieces.push(`        <PostalCode>${escapeXml(billTo.postalCode || billTo.zip || '')}</PostalCode>`);
+      xmlPieces.push(`        <Country>${escapeXml(billTo.country || '')}</Country>`);
+      xmlPieces.push('      </BillTo>');
+
+      xmlPieces.push('      <ShipTo>');
+      xmlPieces.push(`        <Name>${escapeXml(shipTo.fullName || '')}</Name>`);
+      xmlPieces.push(`        <Company>${escapeXml(shipTo.company || '')}</Company>`);
+      xmlPieces.push(`        <Address1>${escapeXml(shipTo.address1 || '')}</Address1>`);
+      xmlPieces.push(`        <Address2>${escapeXml(shipTo.address2 || '')}</Address2>`);
+      xmlPieces.push(`        <City>${escapeXml(shipTo.city || '')}</City>`);
+      xmlPieces.push(`        <State>${escapeXml(shipTo.state || '')}</State>`);
+      xmlPieces.push(`        <PostalCode>${escapeXml(shipTo.postalCode || shipTo.zip || '')}</PostalCode>`);
+      xmlPieces.push(`        <Country>${escapeXml(shipTo.country || '')}</Country>`);
+      xmlPieces.push(`        <Phone>${escapeXml(shipTo.phone || '')}</Phone>`);
+      xmlPieces.push('      </ShipTo>');
+      xmlPieces.push('    </Customer>');
 
       xmlPieces.push('    <Items>');
       for (const it of items) {
@@ -113,6 +159,10 @@ async function getOrdersForShipstation(req, res) {
         xmlPieces.push(`        <Quantity>${escapeXml(it.quantity != null ? it.quantity : (it.qty != null ? it.qty : 1))}</Quantity>`);
         const unit = (typeof it.unitPrice === 'number' ? it.unitPrice : (typeof it.price === 'number' ? it.price : 0));
         xmlPieces.push(`        <UnitPrice>${escapeXml(Number(unit).toFixed(2))}</UnitPrice>`);
+        if (typeof it.weight === 'number' && it.weight > 0) {
+          xmlPieces.push(`        <Weight>${escapeXml(Number(it.weight).toFixed(2))}</Weight>`);
+          xmlPieces.push('        <WeightUnits>Pounds</WeightUnits>');
+        }
         xmlPieces.push('      </Item>');
       }
       xmlPieces.push('    </Items>');
