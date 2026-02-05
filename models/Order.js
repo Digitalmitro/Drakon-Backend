@@ -25,6 +25,7 @@ const itemSchema = new mongoose.Schema(
     name: { type: String, required: true },
     size: { type: String, required: false, default: "One Size" },
     weight: { type: Number, required: false, default: 0 },
+    weightUnits: { type: String, required: false, default: "Pounds" },
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true },
     options: { type: Map, of: String },
@@ -60,6 +61,7 @@ const orderSchema = new mongoose.Schema(
 
     // Shipping & payment details
     shippingMethod: { type: String }, // e.g. "USPSPriorityMail"
+    trackingNumber: { type: String },
     paymentMethod: {
       type: String,
       enum: ["Credit Card", "PayPal", "Cash on Delivery", "Stripe"],

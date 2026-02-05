@@ -4,7 +4,7 @@ const Order = require("../models/Order");
 const Cart = require("../models/Cart");
 const auth = require("basic-auth");                 // for Custom Store endpoints :contentReference[oaicite:7]{index=7}
 const { create } = require("xmlbuilder2");                // for building export XML
-const parser = require("fast-xml-parser");            // for parsing ShipNotice XML
+const { XMLParser } = require("fast-xml-parser");            // for parsing ShipNotice XML
 const axios = require("axios");
 
 const SHIP_API_URL = "https://ssapi.shipstation.com/v2/";
@@ -77,7 +77,8 @@ exports.createOrder = async (req, res) => {
       paymentStatus = "Pending",
       shippingAddress,
       billingAddress,
-      customerCode = ""
+      customerCode = "",
+      shippingMethod
     } = req.body;
 
     if (!paymentMethod || !shippingAddress) {
@@ -102,6 +103,7 @@ exports.createOrder = async (req, res) => {
         name,
         size,
         weight: p.weight || p.productId?.weight || 0,
+        weightUnits: p.weightUnits,
         quantity: p.quantity,
         unitPrice: p.price,
         options: p.options || {},
@@ -123,6 +125,7 @@ exports.createOrder = async (req, res) => {
       discount,
       orderTotal: totalAmount,
       currencyCode: "USD",
+      shippingMethod,
       paymentMethod,
       paymentStatus,
       orderStatus: "Processing"
@@ -255,6 +258,24 @@ function toShipStationDate(dt) {
   return `${mm}/${dd}/${yyyy} ${hh}:${mi}:${ss}`;
 }
 
+function mapCustomStoreStatus({ paymentStatus, orderStatus, status }) {
+  const paidStatus = process.env.SHIPSTATION_CUSTOMSTORE_PAID_STATUS || "paid";
+  const unpaidStatus = process.env.SHIPSTATION_CUSTOMSTORE_UNPAID_STATUS || "unpaid";
+  const shippedStatus = process.env.SHIPSTATION_CUSTOMSTORE_SHIPPED_STATUS || "shipped";
+  const cancelledStatus = process.env.SHIPSTATION_CUSTOMSTORE_CANCELLED_STATUS || "cancelled";
+  const onHoldStatus = process.env.SHIPSTATION_CUSTOMSTORE_ON_HOLD_STATUS || "on_hold";
+
+  const payment = paymentStatus ? String(paymentStatus).toLowerCase() : "";
+  const order = orderStatus ? String(orderStatus).toLowerCase() : "";
+  const legacy = status ? String(status).toLowerCase() : "";
+
+  if (["paid", "completed"].includes(payment)) return paidStatus;
+  if (["shipped", "delivered"].includes(order) || ["shipped", "delivered"].includes(legacy)) return shippedStatus;
+  if (["cancelled", "canceled"].includes(order) || ["cancelled", "canceled"].includes(legacy)) return cancelledStatus;
+  if (["on_hold", "on-hold", "hold"].includes(order) || ["on_hold", "on-hold", "hold"].includes(legacy)) return onHoldStatus;
+  return unpaidStatus;
+}
+
 exports.exportOrders = async (req, res) => {
   // 1) Enforce Basic Auth
   if (!requireBasicAuth(req, res)) return;
@@ -299,9 +320,12 @@ exports.exportOrders = async (req, res) => {
     const lastMod = o.lastModified || o.orderDate;
     od.ele("LastModified").txt(toShipStationDate(lastMod));
 
-    // ─── Map internal status → ShipStation status ───
-    let ssStatus = (o.orderStatus || "").toLowerCase();
-    if (ssStatus === "processing") ssStatus = "awaiting_shipment";
+    // ─── Map internal status → ShipStation Custom Store status ───
+    const ssStatus = mapCustomStoreStatus({
+      paymentStatus: o.paymentStatus,
+      orderStatus: o.orderStatus,
+      status: o.status,
+    });
     od.ele("OrderStatus").txt(ssStatus);
 
     // ─── ShippingMethod, PaymentMethod, CurrencyCode ───
@@ -396,6 +420,12 @@ exports.exportOrders = async (req, res) => {
         });
       }
 
+      if (typeof i.weight === "number" && i.weight > 0) {
+        const units = i.weightUnits || "Pounds";
+        it.ele("Weight").txt(i.weight.toFixed(2));
+        it.ele("WeightUnits").txt(units);
+      }
+
       // Location (optional)
       it.ele("Location").txt(i.location || "");
     });
@@ -413,7 +443,8 @@ exports.shipNotify = async (req, res) => {
     return res.status(400).send("Invalid action");
 
   const xml = req.body;
-  const json = parser.parse(xml, { ignoreAttributes: false, cdataPropName: "dat" });
+  const xmlParser = new XMLParser({ ignoreAttributes: false, cdataPropName: "dat" });
+  const json = xmlParser.parse(xml);
   const sn = json.ShipNotice;
   await Order.findOneAndUpdate(
     { orderNumber: sn.OrderNumber },

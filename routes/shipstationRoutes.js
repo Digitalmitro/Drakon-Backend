@@ -14,4 +14,7 @@ router.post('/rates', shipstationController.getShippingRates);
 // GET /api/shipstation/orders - ShipStation Custom Store endpoint
 router.get('/orders', shipstationController.getOrdersForShipstation);
 
+// POST /api/shipstation/shipnotify - ShipStation Custom Store ship notice
+router.post('/shipnotify', express.text({ type: '*/*' }), shipstationController.shipNotify);
+
 module.exports = router;

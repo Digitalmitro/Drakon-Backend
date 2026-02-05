@@ -1,6 +1,7 @@
 const shipstationService = require('../services/shipstationService');
 const { ProductsModal } = require('../models/AdminModel/ProductModel');
 const Order = require('../models/Order');
+const { XMLParser } = require('fast-xml-parser');
 
 // Helper to escape XML special characters
 function escapeXml(unsafe) {
@@ -13,15 +14,47 @@ function escapeXml(unsafe) {
     .replace(/'/g, '&apos;');
 }
 
-// Map internal statuses to ShipStation-supported statuses
-function mapStatus(internal) {
-  if (!internal) return 'unpaid';
-  const s = String(internal).toLowerCase();
-  if (['paid', 'completed'].includes(s)) return 'paid';
-  if (['shipped', 'delivered'].includes(s)) return 'shipped';
-  if (['cancelled', 'canceled'].includes(s)) return 'cancelled';
-  if (['on_hold', 'on-hold', 'hold'].includes(s)) return 'on_hold';
-  return 'unpaid';
+function requireShipstationBasicAuth(req, res) {
+  const auth = req.headers.authorization || '';
+  if (!auth.startsWith('Basic ')) {
+    res.set('WWW-Authenticate', 'Basic realm="ShipStation"');
+    res.status(401).send('Unauthorized');
+    return false;
+  }
+
+  const base64creds = auth.split(' ')[1] || '';
+  const creds = Buffer.from(base64creds, 'base64').toString('utf8');
+  const [user, pass] = creds.split(':');
+
+  const expectedUser = process.env.SHIPSTATION_USERNAME;
+  const expectedPass = process.env.SHIPSTATION_PASSWORD;
+
+  if (!expectedUser || !expectedPass || user !== expectedUser || pass !== expectedPass) {
+    res.set('WWW-Authenticate', 'Basic realm="ShipStation"');
+    res.status(401).send('Unauthorized');
+    return false;
+  }
+
+  return true;
+}
+
+// Map internal statuses to ShipStation Custom Store statuses (case-sensitive)
+function mapStatus({ paymentStatus, orderStatus, status }) {
+  const paidStatus = process.env.SHIPSTATION_CUSTOMSTORE_PAID_STATUS || 'paid';
+  const unpaidStatus = process.env.SHIPSTATION_CUSTOMSTORE_UNPAID_STATUS || 'unpaid';
+  const shippedStatus = process.env.SHIPSTATION_CUSTOMSTORE_SHIPPED_STATUS || 'shipped';
+  const cancelledStatus = process.env.SHIPSTATION_CUSTOMSTORE_CANCELLED_STATUS || 'cancelled';
+  const onHoldStatus = process.env.SHIPSTATION_CUSTOMSTORE_ON_HOLD_STATUS || 'on_hold';
+
+  const payment = paymentStatus ? String(paymentStatus).toLowerCase() : '';
+  const order = orderStatus ? String(orderStatus).toLowerCase() : '';
+  const legacy = status ? String(status).toLowerCase() : '';
+
+  if (['paid', 'completed'].includes(payment)) return paidStatus;
+  if (['shipped', 'delivered'].includes(order) || ['shipped', 'delivered'].includes(legacy)) return shippedStatus;
+  if (['cancelled', 'canceled'].includes(order) || ['cancelled', 'canceled'].includes(legacy)) return cancelledStatus;
+  if (['on_hold', 'on-hold', 'hold'].includes(order) || ['on_hold', 'on-hold', 'hold'].includes(legacy)) return onHoldStatus;
+  return unpaidStatus;
 }
 
 // Format date for ShipStation XML: MM/dd/yyyy HH:mm (UTC)
@@ -47,24 +80,7 @@ function formatMoney(value) {
 // GET /api/shipstation/orders
 async function getOrdersForShipstation(req, res) {
   try {
-    // Basic Auth
-    const auth = req.headers.authorization || '';
-    if (!auth.startsWith('Basic ')) {
-      res.set('WWW-Authenticate', 'Basic realm="ShipStation"');
-      return res.status(401).send('Unauthorized');
-    }
-
-    const base64creds = auth.split(' ')[1] || '';
-    const creds = Buffer.from(base64creds, 'base64').toString('utf8');
-    const [user, pass] = creds.split(':');
-
-    const expectedUser = process.env.SHIPSTATION_USERNAME;
-    const expectedPass = process.env.SHIPSTATION_PASSWORD;
-
-    if (!expectedUser || !expectedPass || user !== expectedUser || pass !== expectedPass) {
-      res.set('WWW-Authenticate', 'Basic realm="ShipStation"');
-      return res.status(401).send('Unauthorized');
-    }
+    if (!requireShipstationBasicAuth(req, res)) return;
 
     // Fetch real orders from DB (no test fallback)
     const orders = await Order.find().lean();
@@ -79,7 +95,11 @@ async function getOrdersForShipstation(req, res) {
       const orderNumber = escapeXml(o.orderNumber || o._id || '');
       const orderDateIso = o.orderDate ? formatDateForShipstation(o.orderDate) : formatDateForShipstation(new Date());
       const lastModifiedIso = o.lastModified ? formatDateForShipstation(o.lastModified) : orderDateIso;
-      const status = mapStatus(o.orderStatus || o.paymentStatus || o.status);
+      const status = mapStatus({
+        paymentStatus: o.paymentStatus,
+        orderStatus: o.orderStatus,
+        status: o.status,
+      });
 
       // Use billing and shipping from the Order model
       const billTo = o.billTo || {
@@ -160,8 +180,9 @@ async function getOrdersForShipstation(req, res) {
         const unit = (typeof it.unitPrice === 'number' ? it.unitPrice : (typeof it.price === 'number' ? it.price : 0));
         xmlPieces.push(`        <UnitPrice>${escapeXml(Number(unit).toFixed(2))}</UnitPrice>`);
         if (typeof it.weight === 'number' && it.weight > 0) {
+          const units = it.weightUnits || 'Pounds';
           xmlPieces.push(`        <Weight>${escapeXml(Number(it.weight).toFixed(2))}</Weight>`);
-          xmlPieces.push('        <WeightUnits>Pounds</WeightUnits>');
+          xmlPieces.push(`        <WeightUnits>${escapeXml(units)}</WeightUnits>`);
         }
         xmlPieces.push('      </Item>');
       }
@@ -181,6 +202,40 @@ async function getOrdersForShipstation(req, res) {
     res.set('Content-Type', 'application/xml');
     res.set('WWW-Authenticate', 'Basic realm="ShipStation"');
     return res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><Orders></Orders>');
+  }
+}
+
+// POST /api/shipstation/shipnotify
+async function shipNotify(req, res) {
+  try {
+    if (!requireShipstationBasicAuth(req, res)) return;
+
+    const xml = req.body;
+    if (!xml || typeof xml !== 'string') {
+      return res.status(400).send('Invalid ShipNotice payload');
+    }
+
+    const xmlParser = new XMLParser({ ignoreAttributes: false, cdataPropName: 'dat' });
+    const json = xmlParser.parse(xml);
+    const sn = json.ShipNotice;
+    if (!sn || !sn.OrderNumber) {
+      return res.status(400).send('Missing ShipNotice data');
+    }
+
+    await Order.findOneAndUpdate(
+      { orderNumber: sn.OrderNumber },
+      {
+        orderStatus: 'Shipped',
+        lastModified: sn.ShipDate ? new Date(sn.ShipDate) : new Date(),
+        shippingMethod: `${sn.Carrier || ''}-${sn.Service || ''}`.replace(/^-/, ''),
+        trackingNumber: sn.TrackingNumber,
+      }
+    );
+
+    return res.sendStatus(200);
+  } catch (error) {
+    console.error('ShipStation shipnotify error:', error && (error.message || error));
+    return res.status(500).send('Shipnotify failed');
   }
 }
 
@@ -238,4 +293,5 @@ module.exports = {
   getShippingRates,
   getAllProducts,
   getOrdersForShipstation,
+  shipNotify,
 };

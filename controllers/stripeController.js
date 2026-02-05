@@ -33,7 +33,7 @@ exports.createPaymentIntent = async (req, res) => {
 };
 
 exports.sucessfullPayment = async (req, res) => {
-  const { sessionId } = req.body;
+  const { sessionId, orderId, orderNumber } = req.body;
   if (!sessionId)
     return res.status(401).json({ message: "Unauthorized" });
 
@@ -47,10 +47,27 @@ exports.sucessfullPayment = async (req, res) => {
         .json({ message: "Order Not saved! Payment not completed." });
     }
 
+    let updatedOrder = null;
+    if (orderId || orderNumber) {
+      const query = orderId ? { _id: orderId } : { orderNumber };
+      updatedOrder = await Order.findOneAndUpdate(
+        query,
+        { paymentStatus: "Paid", lastModified: new Date() },
+        { new: true }
+      );
+
+      if (!updatedOrder) {
+        return res.status(404).json({ message: "Order not found for payment update." });
+      }
+    }
+
     // Only runs if payment_status === "paid"
     return res.status(200).json({
       message: "Payment successful",
       payment_status: session.payment_status,
+      orderUpdated: Boolean(updatedOrder),
+      orderId: updatedOrder?._id,
+      orderNumber: updatedOrder?.orderNumber,
     });
   } catch (err) {
     console.error("Error confirming order:", err);
