@@ -77,6 +77,7 @@ exports.createPaymentIntent = async (req, res) => {
         },
       ],
       mode: "payment",
+      allow_promotion_codes: true,
       metadata,
       payment_intent_data: {
         metadata,
