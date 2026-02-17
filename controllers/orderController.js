@@ -37,7 +37,10 @@ exports.createOrder = async (req, res) => {
     // console.log(userIdFromToken);
     if (userIdFromToken) {
       // ── Authenticated user: look up their Cart in the DB ──
-      const cart = await Cart.findOne({ userId: userIdFromToken });
+      const cart = await Cart.findOne({ userId: userIdFromToken }).populate({
+        path: "products.productId",
+        select: "title weight",
+      });
       if (!cart || !cart.products || cart.products.length === 0) {
         return res.status(400).json({ message: "Cart is empty" });
       }
@@ -93,13 +96,11 @@ exports.createOrder = async (req, res) => {
 
 
     const itemsForOrder = cartItems.map((p, idx) => {
-      if (!p.name) {
-        throw new Error(`Item #${idx + 1} is missing a name`);
-      }
-      const name = p.name
+      const productIdValue = p?.productId?._id || p?.productId;
+      const name = p?.name || p?.productId?.title || `Product ${idx + 1}`;
       const size = p.size || p.productId?.size || "One Size";
       return {
-        sku: p.productId.toString(),
+        sku: productIdValue ? String(productIdValue) : `item-${idx + 1}`,
         name,
         size,
         weight: p.weight || p.productId?.weight || 0,
@@ -180,7 +181,7 @@ exports.createShippingOrder = async (req, res) => {
 exports.getUserOrders = async (req, res) => {
   try {
     const { userId } = req.params;
-    const orders = await Order.find({ userId }).populate("products.productId", "title price image");
+    const orders = await Order.find({ userId }).sort({ createdAt: -1 });
     res.status(200).json(orders);
   } catch (error) {
     res.status(500).json({ error: "Server error" });
@@ -191,7 +192,7 @@ exports.getUserOrders = async (req, res) => {
 exports.getOrderById = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const order = await Order.findById(orderId).populate("products.productId", "title price image");
+    const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
     res.status(200).json(order);
   } catch (error) {
@@ -206,8 +207,7 @@ exports.getOrder = async (req, res) => {
   }
 
   try {
-    const orders = await Order.find({ userId }) // Only fetch orders for the logged-in user
-      .populate("products.productId", "title price image");
+    const orders = await Order.find({ userId }).sort({ createdAt: -1 }); // Only fetch orders for the logged-in user
 
     if (!orders || orders.length === 0) {
       return res.status(404).json({ message: "No orders found for this user" });

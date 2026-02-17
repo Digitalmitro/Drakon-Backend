@@ -69,6 +69,26 @@ const blogRoutes = require("./routes/blogRoutes");
 const shipstationRoutes = require("./routes/shipstationRoutes");
 const { default: axios } = require("axios");
 connection();
+
+const optionalUserAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.header("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return next();
+    }
+
+    const token = authHeader.split(" ")[1];
+    const verifyToken = jwt.verify(token, process.env.secret_key);
+    const rootUser = await RegisterclientModal.findOne({ _id: verifyToken._id });
+    const rootAdmin = await RegisteradminModal.findById(verifyToken._id);
+
+    req.token = token;
+    req.rootUser = rootUser || rootAdmin || null;
+    return next();
+  } catch (error) {
+    return next();
+  }
+};
 // Mount ShipStation custom store endpoints under /api/shipstation
 server.use('/api/shipstation', shipstationRoutes);
 
@@ -636,10 +656,20 @@ server.post("/coupon/validate", async (req, res) => {
       return res.status(400).json({ valid: false, message: "Coupon code is required" });
     }
 
-    // Find coupon by code
+    const normalizedCode = String(couponCode).trim();
+    const escapedCode = normalizedCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    // Find coupon by code (case-insensitive) and active-like status
     const coupon = await CouponModel.findOne({ 
-      couponName: couponCode,
-      status: "Active"
+      couponName: { $regex: new RegExp(`^${escapedCode}$`, "i") },
+      $or: [
+        { status: "Active" },
+        { status: "active" },
+        { status: true },
+        { status: 1 },
+        { status: "1" },
+        { status: { $exists: false } },
+      ],
     });
 
     if (!coupon) {
@@ -1850,7 +1880,7 @@ server.delete("/addressbookshipping/:id", async (req, res) => {
 // POST /order
 // body: { paymentMethod, shippingAddress, billingAddress?, paymentStatus? }
 // —————————————————————————————————————————————
-server.post("/order", orderController.createOrder);
+server.post("/order", optionalUserAuth, orderController.createOrder);
 
 // —————————————————————————————————————————————
 // 2. Update an order’s status (admin or webhook)
