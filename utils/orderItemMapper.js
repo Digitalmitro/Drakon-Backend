@@ -20,6 +20,22 @@ function safeString(value) {
   return String(value).trim();
 }
 
+function isLikelyMongoObjectId(value) {
+  return /^[a-fA-F0-9]{24}$/.test(safeString(value));
+}
+
+function isLikelyUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    safeString(value)
+  );
+}
+
+function isInvalidGeneratedSku(value) {
+  const normalized = safeString(value);
+  if (!normalized) return true;
+  return isLikelyMongoObjectId(normalized) || isLikelyUuid(normalized);
+}
+
 function getProductVariantBySize(product = {}, resolvedSize = "") {
   if (!Array.isArray(product.size) || !resolvedSize) return null;
   return product.size.find((entry) => safeString(entry?.size) === safeString(resolvedSize)) || null;
@@ -49,7 +65,12 @@ function resolveSize(cartItem = {}) {
 }
 
 function resolveSku(cartItem = {}, product = {}, resolvedSize = "", fallbackName = "") {
-  if (cartItem.sku) return String(cartItem.sku);
+  const cartSku = safeString(cartItem.sku);
+  const productIdAsString = safeString(product?._id || cartItem?.productId);
+
+  if (cartSku && !isInvalidGeneratedSku(cartSku) && cartSku !== productIdAsString) {
+    return cartSku;
+  }
 
   const variant = getProductVariantBySize(product, resolvedSize);
   if (variant?.sku) return String(variant.sku);
@@ -106,11 +127,11 @@ function resolveWeightUnit(cartItem = {}, product = {}, resolvedSize = "") {
 function mapCartItemsToOrderItems(cartItems = []) {
   return cartItems.map((cartItem, idx) => {
     const product = cartItem?.productId || {};
-    const productIdValue = product?._id || cartItem?.productId || "";
-    const baseName = cartItem?.name || product?.title || `Product ${idx + 1}`;
+    const baseName = product?.title || cartItem?.name || `Product ${idx + 1}`;
     const size = resolveSize(cartItem);
-    const sku = resolveSku(cartItem, product, size, baseName);
     const upc = resolveUpc(cartItem, size);
+    const sku = resolveSku(cartItem, product, size, baseName);
+    const normalizedSku = isInvalidGeneratedSku(sku) ? "" : safeString(sku);
     const weight = resolveWeight(cartItem, product, size);
     const weightUnits = resolveWeightUnit(cartItem, product, size);
     const baseOptions = cartItem?.options && typeof cartItem.options === "object" ? cartItem.options : {};
@@ -118,10 +139,12 @@ function mapCartItemsToOrderItems(cartItems = []) {
       ...baseOptions,
       ...(size && size !== "One Size" ? { Size: size } : {}),
     };
-    const name = appendSizeToName(baseName, size) || `Product ${idx + 1}`;
+    const name = safeString(product?.title)
+      ? safeString(product.title)
+      : appendSizeToName(baseName, size) || `Product ${idx + 1}`;
 
     return {
-      sku: sku || (productIdValue ? String(productIdValue) : `item-${idx + 1}`),
+      sku: normalizedSku || upc || appendSizeToName(baseName, size) || `item-${idx + 1}`,
       upc,
       name,
       size,
