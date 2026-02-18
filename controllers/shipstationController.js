@@ -2,6 +2,7 @@ const shipstationService = require('../services/shipstationService');
 const { ProductsModal } = require('../models/AdminModel/ProductModel');
 const Order = require('../models/Order');
 const { XMLParser } = require('fast-xml-parser');
+const { normalizeWeightUnits } = require('../utils/orderItemMapper');
 
 // Helper to escape XML special characters
 function escapeXml(unsafe) {
@@ -173,16 +174,29 @@ async function getOrdersForShipstation(req, res) {
 
       xmlPieces.push('    <Items>');
       for (const it of items) {
-        xmlPieces.push('      <Item>');
-        xmlPieces.push(`        <SKU>${escapeXml(it.sku || it.SKU || '')}</SKU>`);
-        xmlPieces.push(`        <Name>${escapeXml(it.name || '')}</Name>`);
-        xmlPieces.push(`        <Quantity>${escapeXml(it.quantity != null ? it.quantity : (it.qty != null ? it.qty : 1))}</Quantity>`);
+        const sku = it.sku || it.SKU || it.upc || it.UPC || '';
+        const upc = it.upc || it.UPC || '';
+        const quantity = it.quantity != null ? it.quantity : (it.qty != null ? it.qty : 1);
         const unit = (typeof it.unitPrice === 'number' ? it.unitPrice : (typeof it.price === 'number' ? it.price : 0));
+        const weightValue = Number.isFinite(Number(it.weight)) ? Number(it.weight) : 0;
+        const weightUnits = normalizeWeightUnits(it.weightUnits);
+        const size = it.size || it?.options?.Size || it?.options?.size || '';
+
+        xmlPieces.push('      <Item>');
+        xmlPieces.push(`        <SKU>${escapeXml(sku)}</SKU>`);
+        xmlPieces.push(`        <UPC>${escapeXml(upc)}</UPC>`);
+        xmlPieces.push(`        <Name>${escapeXml(it.name || '')}</Name>`);
+        xmlPieces.push(`        <Quantity>${escapeXml(quantity)}</Quantity>`);
         xmlPieces.push(`        <UnitPrice>${escapeXml(Number(unit).toFixed(2))}</UnitPrice>`);
-        if (typeof it.weight === 'number' && it.weight > 0) {
-          const units = it.weightUnits || 'Pounds';
-          xmlPieces.push(`        <Weight>${escapeXml(Number(it.weight).toFixed(2))}</Weight>`);
-          xmlPieces.push(`        <WeightUnits>${escapeXml(units)}</WeightUnits>`);
+        xmlPieces.push(`        <Weight>${escapeXml(weightValue.toFixed(2))}</Weight>`);
+        xmlPieces.push(`        <WeightUnits>${escapeXml(weightUnits)}</WeightUnits>`);
+        if (size) {
+          xmlPieces.push('        <Options>');
+          xmlPieces.push('          <Option>');
+          xmlPieces.push('            <Name>Size</Name>');
+          xmlPieces.push(`            <Value>${escapeXml(size)}</Value>`);
+          xmlPieces.push('          </Option>');
+          xmlPieces.push('        </Options>');
         }
         xmlPieces.push('      </Item>');
       }

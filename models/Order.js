@@ -22,6 +22,7 @@ const addressSchema = new mongoose.Schema(
 const itemSchema = new mongoose.Schema(
   {
     sku: { type: String, required: true },
+    upc: { type: String, required: false, default: "" },
     name: { type: String, required: true },
     size: { type: String, required: false, default: "One Size" },
     weight: { type: Number, required: false, default: 0 },

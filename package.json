@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "migrate:orders-upc": "node utils/backfillOrderItemsUpc.js",
+    "migrate:orders-upc:apply": "node utils/backfillOrderItemsUpc.js --apply"
   },
   "keywords": [],
   "author": "",
@@ -32,9 +34,5 @@
     "stripe": "^17.7.0",
     "twilio": "^5.0.4",
     "xmlbuilder2": "^3.1.1"
-  },
-  "devDependencies": {
-    "jest": "^30.2.0",
-    "supertest": "^7.2.2"
   }
 }

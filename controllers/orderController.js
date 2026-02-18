@@ -6,6 +6,7 @@ const auth = require("basic-auth");                 // for Custom Store endpoint
 const { create } = require("xmlbuilder2");                // for building export XML
 const { XMLParser } = require("fast-xml-parser");            // for parsing ShipNotice XML
 const axios = require("axios");
+const { mapCartItemsToOrderItems, normalizeWeightUnits } = require("../utils/orderItemMapper");
 
 const SHIP_API_URL = "https://ssapi.shipstation.com/v2/";
 const SHIP_API_KEY = process.env.SHIPSTATION_API_KEY;
@@ -39,7 +40,7 @@ exports.createOrder = async (req, res) => {
       // ── Authenticated user: look up their Cart in the DB ──
       const cart = await Cart.findOne({ userId: userIdFromToken }).populate({
         path: "products.productId",
-        select: "title weight",
+        select: "title weight weightUnits upc size",
       });
       if (!cart || !cart.products || cart.products.length === 0) {
         return res.status(400).json({ message: "Cart is empty" });
@@ -95,22 +96,7 @@ exports.createOrder = async (req, res) => {
     //    (same for both user‐cart and guest‐cart)
 
 
-    const itemsForOrder = cartItems.map((p, idx) => {
-      const productIdValue = p?.productId?._id || p?.productId;
-      const name = p?.name || p?.productId?.title || `Product ${idx + 1}`;
-      const size = p.size || p.productId?.size || "One Size";
-      return {
-        sku: productIdValue ? String(productIdValue) : `item-${idx + 1}`,
-        name,
-        size,
-        weight: p.weight || p.productId?.weight || 0,
-        weightUnits: p.weightUnits,
-        quantity: p.quantity,
-        unitPrice: p.price,
-        options: p.options || {},
-        location: p.location || "",
-      };
-    });
+    const itemsForOrder = mapCartItemsToOrderItems(cartItems);
 
     // 5) Construct the new Order document
     const newOrder = new Order({
@@ -390,7 +376,13 @@ exports.exportOrders = async (req, res) => {
     const itemsNode = od.ele("Items");
     (o.items || []).forEach((i) => {
       const it = itemsNode.ele("Item");
-      it.ele("SKU").txt(i.sku || "");
+      const sku = i.sku || i.upc || "";
+      const upc = i.upc || "";
+      const normalizedWeight = Number.isFinite(Number(i.weight)) ? Number(i.weight) : 0;
+      const normalizedWeightUnits = normalizeWeightUnits(i.weightUnits);
+
+      it.ele("SKU").txt(sku);
+      it.ele("UPC").txt(upc);
       it.ele("Name").txt(i.name || "");
       it.ele("Quantity").txt(i.quantity != null ? i.quantity.toString() : "0");
       it.ele("UnitPrice").txt((i.unitPrice || 0).toFixed(2));
@@ -407,6 +399,10 @@ exports.exportOrders = async (req, res) => {
         }
       }
 
+      if (i.size) {
+        plainOpts.Size = String(i.size);
+      }
+
       // Filter valid XML names and build <Options> if any
       const validOptionKeys = Object.keys(plainOpts).filter((optKey) => {
         return /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(optKey);
@@ -420,11 +416,8 @@ exports.exportOrders = async (req, res) => {
         });
       }
 
-      if (typeof i.weight === "number" && i.weight > 0) {
-        const units = i.weightUnits || "Pounds";
-        it.ele("Weight").txt(i.weight.toFixed(2));
-        it.ele("WeightUnits").txt(units);
-      }
+      it.ele("Weight").txt(normalizedWeight.toFixed(2));
+      it.ele("WeightUnits").txt(normalizedWeightUnits);
 
       // Location (optional)
       it.ele("Location").txt(i.location || "");
@@ -492,7 +485,11 @@ exports.createTestOrder = async (req, res) => {
       items: [
         {
           sku: "SKU123",
+          upc: "012345678905",
           name: "Dummy Product",
+          size: "M",
+          weight: 1.25,
+          weightUnits: "Pounds",
           quantity: 2,
           unitPrice: 19.99,
           location: "Warehouse A",
