@@ -30,9 +30,23 @@ const featuredproductsSchema = mongoose.Schema({
           type: String,
           required: true,
         },
+        sku: {
+          type: String,
+          required: false,
+        },
         upc: {
           type: String,
           required: false,
+        },
+        weight: {
+          type: Number,
+          required: false,
+          default: 0,
+        },
+        weightUnits: {
+          type: String,
+          required: false,
+          default: "Pounds",
         },
       },
     ],
@@ -45,6 +59,20 @@ const featuredproductsSchema = mongoose.Schema({
   upc: {
     type: String, // fallback for products with no size
     required: false,
+  },
+  sku: {
+    type: String,
+    required: false,
+  },
+  weight: {
+    type: Number,
+    required: false,
+    default: 0,
+  },
+  weightUnits: {
+    type: String,
+    required: false,
+    default: "Pounds",
   },
   stock: {
     type: Number,

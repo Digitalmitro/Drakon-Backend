@@ -26,6 +26,20 @@ const cartSchema = new mongoose.Schema({
         type: String,
         required: false,
       },
+      sku: {
+        type: String,
+        required: false,
+      },
+      weight: {
+        type: Number,
+        required: false,
+        default: 0,
+      },
+      weightUnits: {
+        type: String,
+        required: false,
+        default: "Pounds",
+      },
       price: {
         type: Number,
         required: true,

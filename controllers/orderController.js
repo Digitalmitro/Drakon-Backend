@@ -40,7 +40,7 @@ exports.createOrder = async (req, res) => {
       // ── Authenticated user: look up their Cart in the DB ──
       const cart = await Cart.findOne({ userId: userIdFromToken }).populate({
         path: "products.productId",
-        select: "title weight weightUnits upc size",
+        select: "title sku weight weightUnits upc size",
       });
       if (!cart || !cart.products || cart.products.length === 0) {
         return res.status(400).json({ message: "Cart is empty" });

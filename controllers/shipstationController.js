@@ -78,6 +78,30 @@ function formatMoney(value) {
   const num = typeof value === 'number' ? value : Number(value || 0);
   return Number.isFinite(num) ? num.toFixed(2) : '0.00';
 }
+
+function getItemSize(item = {}) {
+  const direct = item.size ? String(item.size).trim() : '';
+  if (direct) return direct;
+
+  const options = item.options && typeof item.options === 'object' ? item.options : null;
+  if (!options) return '';
+
+  if (options instanceof Map) {
+    const fromMap = options.get('Size') || options.get('size');
+    return fromMap ? String(fromMap).trim() : '';
+  }
+
+  const fromObj = options.Size || options.size;
+  return fromObj ? String(fromObj).trim() : '';
+}
+
+function withSizeInName(name = '', size = '') {
+  const base = name ? String(name).trim() : '';
+  const normalizedSize = size ? String(size).trim() : '';
+  if (!normalizedSize || normalizedSize === 'One Size') return base;
+  if (base.toLowerCase().endsWith(normalizedSize.toLowerCase())) return base;
+  return `${base} ${normalizedSize}`.trim();
+}
 // GET /api/shipstation/orders
 async function getOrdersForShipstation(req, res) {
   try {
@@ -174,28 +198,34 @@ async function getOrdersForShipstation(req, res) {
 
       xmlPieces.push('    <Items>');
       for (const it of items) {
-        const sku = it.sku || it.SKU || it.upc || it.UPC || '';
+        const size = getItemSize(it);
+        const baseName = it.name || '';
+        const computedName = withSizeInName(baseName, size);
+        const sku = it.sku || it.SKU || computedName || '';
         const upc = it.upc || it.UPC || '';
+        const itemOptions = [];
+        if (size) itemOptions.push({ name: 'Size', value: size });
+        if (upc) itemOptions.push({ name: 'UPC', value: upc });
         const quantity = it.quantity != null ? it.quantity : (it.qty != null ? it.qty : 1);
         const unit = (typeof it.unitPrice === 'number' ? it.unitPrice : (typeof it.price === 'number' ? it.price : 0));
         const weightValue = Number.isFinite(Number(it.weight)) ? Number(it.weight) : 0;
         const weightUnits = normalizeWeightUnits(it.weightUnits);
-        const size = it.size || it?.options?.Size || it?.options?.size || '';
 
         xmlPieces.push('      <Item>');
         xmlPieces.push(`        <SKU>${escapeXml(sku)}</SKU>`);
-        xmlPieces.push(`        <UPC>${escapeXml(upc)}</UPC>`);
-        xmlPieces.push(`        <Name>${escapeXml(it.name || '')}</Name>`);
+        xmlPieces.push(`        <Name>${escapeXml(computedName)}</Name>`);
         xmlPieces.push(`        <Quantity>${escapeXml(quantity)}</Quantity>`);
         xmlPieces.push(`        <UnitPrice>${escapeXml(Number(unit).toFixed(2))}</UnitPrice>`);
         xmlPieces.push(`        <Weight>${escapeXml(weightValue.toFixed(2))}</Weight>`);
         xmlPieces.push(`        <WeightUnits>${escapeXml(weightUnits)}</WeightUnits>`);
-        if (size) {
+        if (itemOptions.length > 0) {
           xmlPieces.push('        <Options>');
-          xmlPieces.push('          <Option>');
-          xmlPieces.push('            <Name>Size</Name>');
-          xmlPieces.push(`            <Value>${escapeXml(size)}</Value>`);
-          xmlPieces.push('          </Option>');
+          for (const option of itemOptions) {
+            xmlPieces.push('          <Option>');
+            xmlPieces.push(`            <Name>${escapeXml(option.name)}</Name>`);
+            xmlPieces.push(`            <Value>${escapeXml(option.value)}</Value>`);
+            xmlPieces.push('          </Option>');
+          }
           xmlPieces.push('        </Options>');
         }
         xmlPieces.push('      </Item>');

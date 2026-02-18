@@ -9,14 +9,17 @@ exports.addToCart = async (req, res) => {
     const product = await FeaturedpoductModal.findById(productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // Extract UPC based on selected size or product-level UPC
-    let upc = '';
-    if (size && product.size && Array.isArray(product.size)) {
-      const sizeData = product.size.find(s => s.size === size);
-      upc = sizeData?.upc || product.upc || '';
-    } else {
-      upc = product.upc || '';
-    }
+    const selectedSize = size || "One Size";
+    const sizeData = selectedSize && product.size && Array.isArray(product.size)
+      ? product.size.find((entry) => entry?.size === selectedSize)
+      : null;
+
+    const upc = sizeData?.upc || product.upc || "";
+    const sku = sizeData?.sku || product.sku || `${product.title}${selectedSize && selectedSize !== "One Size" ? ` ${selectedSize}` : ""}`.trim();
+    const weight = Number.isFinite(Number(sizeData?.weight))
+      ? Number(sizeData.weight)
+      : (Number.isFinite(Number(product.weight)) ? Number(product.weight) : 0);
+    const weightUnits = sizeData?.weightUnits || product.weightUnits || "Pounds";
 
     let cart = await Cart.findOne({ userId });
 
@@ -25,7 +28,7 @@ exports.addToCart = async (req, res) => {
     }
 
     const existingProduct = cart.products.find(p => 
-      p.productId.toString() === productId && p.size === size
+      p.productId.toString() === productId && p.size === selectedSize
     );
     
     if (existingProduct) {
@@ -37,8 +40,11 @@ exports.addToCart = async (req, res) => {
         quantity,
         price: product.price,
         total: product.price * quantity,
-        size,
+        size: selectedSize,
         upc,
+        sku,
+        weight,
+        weightUnits,
       });
     }
 
@@ -59,7 +65,7 @@ exports.getCart = async (req, res) => {
     const userId = req.rootUser._id;
     const cart = await Cart.findOne({ userId }).populate({
       path: "products.productId",
-      select: "title price image stock"
+      select: "title price image stock size upc sku weight weightUnits"
     });
     
     if (!cart) return res.status(404).json({ message: "Cart is empty" });
