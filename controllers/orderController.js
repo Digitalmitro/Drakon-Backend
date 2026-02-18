@@ -8,6 +8,282 @@ const { XMLParser } = require("fast-xml-parser");            // for parsing Ship
 const axios = require("axios");
 const { mapCartItemsToOrderItems, normalizeWeightUnits } = require("../utils/orderItemMapper");
 
+const SHIPSTATION_V1_API_URL = "https://ssapi.shipstation.com";
+
+function normalizeShippingMethodValue(method) {
+  if (!method) return "";
+
+  if (typeof method === "string") {
+    return method.trim();
+  }
+
+  if (typeof method === "object") {
+    if (method.carrierCode || method.serviceCode || method.packageCode || method.confirmation) {
+      const carrierCode = String(method.carrierCode || "stamps_com").trim();
+      const serviceCode = String(method.serviceCode || "").trim();
+      const packageCode = String(method.packageCode || "package").trim();
+      const confirmation = String(method.confirmation || "none").trim();
+      return [carrierCode, serviceCode, packageCode, confirmation].join("|");
+    }
+
+    if (method.serviceName) return String(method.serviceName).trim();
+  }
+
+  return "";
+}
+
+function resolveOrderShippingMethod(payloadShippingMethod, cartItems) {
+  const explicit = normalizeShippingMethodValue(payloadShippingMethod);
+  if (explicit) return explicit;
+
+  if (!Array.isArray(cartItems)) return "";
+
+  for (const item of cartItems) {
+    const normalized = normalizeShippingMethodValue(item?.shippingMethod);
+    if (normalized) return normalized;
+  }
+
+  return "";
+}
+
+function normalizeShipstationConfig(config = {}) {
+  if (!config || typeof config !== "object") {
+    return {
+      carrierCode: "",
+      serviceCode: "",
+      packageCode: "",
+      confirmation: "",
+    };
+  }
+
+  return {
+    carrierCode: config.carrierCode ? String(config.carrierCode).trim() : "",
+    serviceCode: config.serviceCode ? String(config.serviceCode).trim() : "",
+    packageCode: config.packageCode ? String(config.packageCode).trim() : "",
+    confirmation: config.confirmation ? String(config.confirmation).trim() : "",
+  };
+}
+
+function toNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function convertWeightToPounds(value, units) {
+  const weight = toNumber(value, 0);
+  if (weight <= 0) return 0;
+
+  const normalized = normalizeWeightUnits(units);
+  if (normalized === "Pounds") return weight;
+  if (normalized === "Ounces") return weight / 16;
+  if (normalized === "Grams") return weight / 453.592;
+  if (normalized === "Kilograms") return weight * 2.20462;
+
+  return weight;
+}
+
+function getOrderWeightInPounds(order = {}) {
+  const total = (Array.isArray(order.items) ? order.items : []).reduce((sum, item) => {
+    const qty = Math.max(1, toNumber(item?.quantity, 1));
+    return sum + convertWeightToPounds(item?.weight, item?.weightUnits) * qty;
+  }, 0);
+
+  if (total > 0) return total;
+  return toNumber(process.env.SHIPSTATION_DEFAULT_WEIGHT_POUNDS, 1);
+}
+
+function mapAddressForShipstation(address = {}) {
+  return {
+    name: address.fullName || "",
+    company: address.company || "",
+    street1: address.address1 || "",
+    street2: address.address2 || "",
+    city: address.city || "",
+    state: address.state || "",
+    postalCode: address.postalCode || address.zip || "",
+    country: address.country || "US",
+    phone: address.phone || "",
+  };
+}
+
+function parseShipstationConfigFromOrder(order = {}) {
+  const defaultCarrierCode = String(process.env.SHIPSTATION_DEFAULT_CARRIER_CODE || "stamps_com").trim();
+  const defaultPackageCode = String(process.env.SHIPSTATION_DEFAULT_PACKAGE_CODE || "package").trim();
+  const defaultConfirmation = String(process.env.SHIPSTATION_DEFAULT_CONFIRMATION || "none").trim();
+
+  let carrierCode = defaultCarrierCode;
+  let serviceCode = order.customField1 ? String(order.customField1).trim() : "";
+  let packageCode = order.customField2 ? String(order.customField2).trim() : defaultPackageCode;
+  let confirmation = order.customField3 ? String(order.customField3).trim() : defaultConfirmation;
+
+  const rawShippingMethod = order.shippingMethod ? String(order.shippingMethod).trim() : "";
+  if (rawShippingMethod.includes("|")) {
+    const [carrierRaw, serviceRaw, packageRaw, confirmationRaw] = rawShippingMethod.split("|").map((part) => String(part || "").trim());
+    carrierCode = carrierRaw || carrierCode;
+    serviceCode = serviceRaw || serviceCode;
+    packageCode = packageRaw || packageCode;
+    confirmation = confirmationRaw || confirmation;
+  }
+
+  return {
+    carrierCode,
+    serviceCode,
+    packageCode,
+    confirmation,
+  };
+}
+
+function buildShipstationOrderPayload(order = {}) {
+  const cfg = parseShipstationConfigFromOrder(order);
+  const useDirectServiceCodes = String(process.env.SHIPSTATION_USE_DIRECT_SERVICE_CODES || "true").toLowerCase() !== "false";
+  const rawShippingMethod = order.shippingMethod ? String(order.shippingMethod).trim() : "";
+  const requestedShippingService = rawShippingMethod && !rawShippingMethod.includes("|")
+    ? rawShippingMethod
+    : (cfg.serviceCode || "");
+  const dimensions = {
+    units: "inches",
+    length: toNumber(process.env.SHIPSTATION_DEFAULT_PACKAGE_LENGTH, 10),
+    width: toNumber(process.env.SHIPSTATION_DEFAULT_PACKAGE_WIDTH, 8),
+    height: toNumber(process.env.SHIPSTATION_DEFAULT_PACKAGE_HEIGHT, 4),
+  };
+
+  const items = (Array.isArray(order.items) ? order.items : []).map((item, index) => ({
+    lineItemKey: `${order.orderNumber || order._id}-${index + 1}`,
+    sku: item.sku || item.upc || `item-${index + 1}`,
+    name: item.name || `Item ${index + 1}`,
+    imageUrl: "",
+    weight: {
+      value: Math.max(0, convertWeightToPounds(item.weight, item.weightUnits)),
+      units: "pounds",
+    },
+    quantity: Math.max(1, toNumber(item.quantity, 1)),
+    unitPrice: toNumber(item.unitPrice, 0),
+    taxAmount: 0,
+    shippingAmount: 0,
+    warehouseLocation: item.location || "",
+    options: [],
+    fulfillmentSku: item.sku || item.upc || "",
+    adjustment: false,
+    upc: item.upc || "",
+    createDate: new Date(order.orderDate || Date.now()).toISOString(),
+    modifyDate: new Date(order.lastModified || order.orderDate || Date.now()).toISOString(),
+  }));
+
+  const payload = {
+    orderNumber: order.orderNumber,
+    orderKey: String(order._id || order.orderNumber || ""),
+    orderDate: new Date(order.orderDate || Date.now()).toISOString(),
+    orderStatus: "awaiting_shipment",
+    customerUsername: order.customerCode || order.billTo?.email || order.shipTo?.email || order.orderNumber,
+    customerEmail: order.billTo?.email || order.shipTo?.email || "",
+    billTo: mapAddressForShipstation(order.billTo),
+    shipTo: mapAddressForShipstation(order.shipTo),
+    items,
+    amountPaid: toNumber(order.orderTotal, 0),
+    taxAmount: toNumber(order.taxAmount, 0),
+    shippingAmount: toNumber(order.shippingAmount, 0),
+    customerNotes: order.customerNotes || "",
+    internalNotes: order.internalNotes || "",
+    gift: !!order.gift,
+    giftMessage: order.giftMessage || "",
+    paymentMethod: order.paymentMethod || "",
+    requestedShippingService,
+    confirmation: cfg.confirmation,
+    shipDate: new Date().toISOString(),
+    weight: {
+      value: getOrderWeightInPounds(order),
+      units: "pounds",
+    },
+    dimensions,
+    customField1: order.customField1 || cfg.serviceCode || "",
+    customField2: order.customField2 || cfg.packageCode || "",
+    customField3: order.customField3 || cfg.confirmation || "",
+    advancedOptions: {
+      customField1: order.customField1 || cfg.serviceCode || "",
+      customField2: order.customField2 || cfg.packageCode || "",
+      customField3: order.customField3 || cfg.confirmation || "",
+    },
+  };
+
+  if (useDirectServiceCodes) {
+    payload.carrierCode = cfg.carrierCode;
+    payload.serviceCode = cfg.serviceCode;
+    payload.packageCode = cfg.packageCode;
+  }
+
+  return payload;
+}
+
+async function pushOrderToShipstation(order) {
+  const shouldPush = String(process.env.SHIPSTATION_PUSH_ORDER_ON_CREATE || "true").toLowerCase() !== "false";
+  if (!shouldPush) {
+    return { enabled: false, success: false, reason: "SHIPSTATION_PUSH_ORDER_ON_CREATE disabled" };
+  }
+
+  if (!SHIP_API_KEY || !SHIP_API_SECRET) {
+    return { enabled: true, success: false, reason: "Missing SHIPSTATION_API_KEY/SHIPSTATION_API_SECRET" };
+  }
+
+  try {
+    const payload = buildShipstationOrderPayload(order);
+    const response = await axios.post(
+      `${SHIPSTATION_V1_API_URL}/orders/createorder`,
+      payload,
+      {
+        auth: {
+          username: SHIP_API_KEY,
+          password: SHIP_API_SECRET,
+        },
+        headers: {
+          "Content-Type": "application/json",
+        },
+        timeout: 20000,
+      }
+    );
+
+    return {
+      enabled: true,
+      success: true,
+      orderId: response.data?.orderId || null,
+      orderKey: response.data?.orderKey || null,
+    };
+  } catch (error) {
+    const payload = buildShipstationOrderPayload(order);
+    const responseBody = error.response?.data;
+    const responseBodyText = typeof responseBody === "string"
+      ? responseBody
+      : (responseBody ? JSON.stringify(responseBody) : "");
+
+    console.error("ShipStation createorder failed", {
+      orderNumber: order?.orderNumber,
+      status: error.response?.status || null,
+      statusText: error.response?.statusText || null,
+      responseBody: responseBody || null,
+      payloadSummary: {
+        orderNumber: payload?.orderNumber,
+        orderStatus: payload?.orderStatus,
+        carrierCode: payload?.carrierCode,
+        serviceCode: payload?.serviceCode,
+        packageCode: payload?.packageCode,
+        confirmation: payload?.confirmation,
+        weight: payload?.weight,
+        dimensions: payload?.dimensions,
+        itemCount: Array.isArray(payload?.items) ? payload.items.length : 0,
+      },
+    });
+
+    return {
+      enabled: true,
+      success: false,
+      reason:
+        error.response?.data?.ExceptionMessage ||
+        error.response?.data?.message ||
+        responseBodyText ||
+        error.message,
+    };
+  }
+}
+
 const SHIP_API_URL = "https://ssapi.shipstation.com/v2/";
 const SHIP_API_KEY = process.env.SHIPSTATION_API_KEY;
 const SHIP_API_SECRET = process.env.SHIPSTATION_API_SECRET;
@@ -82,7 +358,8 @@ exports.createOrder = async (req, res) => {
       shippingAddress,
       billingAddress,
       customerCode = "",
-      shippingMethod
+      shippingMethod,
+      shipstationConfig,
     } = req.body;
 
     if (!paymentMethod || !shippingAddress) {
@@ -99,6 +376,9 @@ exports.createOrder = async (req, res) => {
     const itemsForOrder = mapCartItemsToOrderItems(cartItems);
 
     // 5) Construct the new Order document
+    const resolvedShippingMethod = resolveOrderShippingMethod(shippingMethod, cartItems);
+    const normalizedShipstationConfig = normalizeShipstationConfig(shipstationConfig);
+
     const newOrder = new Order({
       orderNumber,
       orderDate: new Date(),
@@ -112,7 +392,10 @@ exports.createOrder = async (req, res) => {
       discount,
       orderTotal: totalAmount,
       currencyCode: "USD",
-      shippingMethod,
+      shippingMethod: resolvedShippingMethod || undefined,
+      customField1: normalizedShipstationConfig.serviceCode || undefined,
+      customField2: normalizedShipstationConfig.packageCode || undefined,
+      customField3: normalizedShipstationConfig.confirmation || undefined,
       paymentMethod,
       paymentStatus,
       orderStatus: "Processing"
@@ -124,7 +407,12 @@ exports.createOrder = async (req, res) => {
       await Cart.deleteOne({ userId: userIdFromToken });
     }
 
-    return res.status(201).json({ message: "Order placed", order: newOrder });
+    const shipstationSync = await pushOrderToShipstation(newOrder);
+    if (!shipstationSync.success) {
+      console.error("ShipStation order sync failed:", shipstationSync.reason || "Unknown error");
+    }
+
+    return res.status(201).json({ message: "Order placed", order: newOrder, shipstationSync });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Server error" });

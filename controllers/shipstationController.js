@@ -79,6 +79,75 @@ function formatMoney(value) {
   return Number.isFinite(num) ? num.toFixed(2) : '0.00';
 }
 
+function normalizeDimension(value, fallback) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return fallback;
+}
+
+function convertWeightToOunces(value, units) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+
+  const normalizedUnits = normalizeWeightUnits(units);
+  if (normalizedUnits === 'Pounds') return parsed * 16;
+  if (normalizedUnits === 'Kilograms') return parsed * 35.274;
+  if (normalizedUnits === 'Grams') return parsed * 0.035274;
+  return parsed;
+}
+
+function getOrderWeightOunces(items = []) {
+  const sum = (Array.isArray(items) ? items : []).reduce((total, item) => {
+    const quantity = Number(item?.quantity);
+    const safeQty = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+    const itemOunces = convertWeightToOunces(item?.weight, item?.weightUnits);
+    return total + (itemOunces * safeQty);
+  }, 0);
+
+  if (sum > 0) return sum;
+  return normalizeDimension(process.env.SHIPSTATION_DEFAULT_WEIGHT_OUNCES, 1);
+}
+
+function parseShippingMethodConfig(order = {}) {
+  const defaultCarrierCode = (process.env.SHIPSTATION_DEFAULT_CARRIER_CODE || 'stamps_com').trim();
+  const defaultServiceCode = (process.env.SHIPSTATION_DEFAULT_SERVICE_CODE || '').trim();
+  const defaultPackageCode = (process.env.SHIPSTATION_DEFAULT_PACKAGE_CODE || 'package').trim();
+  const defaultConfirmation = (process.env.SHIPSTATION_DEFAULT_CONFIRMATION || 'none').trim();
+
+  const raw = order?.shippingMethod ? String(order.shippingMethod).trim() : '';
+
+  let carrierCode = defaultCarrierCode;
+  let serviceCode = order?.customField1 ? String(order.customField1).trim() : defaultServiceCode;
+  let packageCode = order?.customField2 ? String(order.customField2).trim() : defaultPackageCode;
+  let confirmation = order?.customField3 ? String(order.customField3).trim() : defaultConfirmation;
+  let requestedShippingService = raw;
+
+  if (raw.includes('|')) {
+    const [carrierRaw, serviceRaw, packageRaw, confirmationRaw] = raw.split('|').map((part) => (part || '').trim());
+    carrierCode = carrierRaw || carrierCode;
+    serviceCode = serviceRaw || serviceCode;
+    packageCode = packageRaw || packageCode;
+    confirmation = confirmationRaw || confirmation;
+    requestedShippingService = serviceCode || requestedShippingService;
+  }
+
+  if (!requestedShippingService) {
+    requestedShippingService = serviceCode || '';
+  }
+
+  return {
+    carrierCode,
+    serviceCode,
+    packageCode,
+    confirmation,
+    requestedShippingService,
+  };
+}
+
+function shouldIncludeAdvancedShipmentTags() {
+  return String(process.env.SHIPSTATION_INCLUDE_ADVANCED_XML_TAGS || 'true').trim().toLowerCase() !== 'false';
+}
+
 function getItemSize(item = {}) {
   const direct = item.size ? String(item.size).trim() : '';
   if (direct) return direct;
@@ -153,6 +222,11 @@ async function getOrdersForShipstation(req, res) {
       };
 
       const items = Array.isArray(o.items) ? o.items : [];
+      const shippingConfig = parseShippingMethodConfig(o);
+      const orderWeightOunces = getOrderWeightOunces(items);
+      const packageLength = normalizeDimension(process.env.SHIPSTATION_DEFAULT_PACKAGE_LENGTH, 10);
+      const packageWidth = normalizeDimension(process.env.SHIPSTATION_DEFAULT_PACKAGE_WIDTH, 8);
+      const packageHeight = normalizeDimension(process.env.SHIPSTATION_DEFAULT_PACKAGE_HEIGHT, 4);
 
       xmlPieces.push('  <Order>');
       xmlPieces.push(`    <OrderID>${orderId}</OrderID>`);
@@ -163,9 +237,27 @@ async function getOrdersForShipstation(req, res) {
       xmlPieces.push(`    <OrderTotal>${formatMoney(o.orderTotal)}</OrderTotal>`);
       xmlPieces.push(`    <ShippingAmount>${formatMoney(o.shippingAmount)}</ShippingAmount>`);
       xmlPieces.push(`    <TaxAmount>${formatMoney(o.taxAmount)}</TaxAmount>`);
-      xmlPieces.push(`    <ShippingMethod>${escapeXml(o.shippingMethod || '')}</ShippingMethod>`);
+      xmlPieces.push(`    <ShippingMethod>${escapeXml(shippingConfig.requestedShippingService || o.shippingMethod || '')}</ShippingMethod>`);
       xmlPieces.push(`    <PaymentMethod>${escapeXml(o.paymentMethod || '')}</PaymentMethod>`);
       xmlPieces.push(`    <CurrencyCode>${escapeXml(o.currencyCode || 'USD')}</CurrencyCode>`);
+      if (shouldIncludeAdvancedShipmentTags()) {
+        xmlPieces.push(`    <CarrierCode>${escapeXml(shippingConfig.carrierCode)}</CarrierCode>`);
+        xmlPieces.push(`    <ServiceCode>${escapeXml(shippingConfig.serviceCode)}</ServiceCode>`);
+        xmlPieces.push(`    <PackageCode>${escapeXml(shippingConfig.packageCode)}</PackageCode>`);
+        xmlPieces.push(`    <Confirmation>${escapeXml(shippingConfig.confirmation)}</Confirmation>`);
+      }
+      xmlPieces.push(`    <RequestedShippingService>${escapeXml(shippingConfig.requestedShippingService)}</RequestedShippingService>`);
+      xmlPieces.push(`    <CustomField1>${escapeXml(o.customField1 || '')}</CustomField1>`);
+      xmlPieces.push(`    <CustomField2>${escapeXml(o.customField2 || '')}</CustomField2>`);
+      xmlPieces.push(`    <CustomField3>${escapeXml(o.customField3 || '')}</CustomField3>`);
+      xmlPieces.push(`    <Weight>${escapeXml(orderWeightOunces.toFixed(2))}</Weight>`);
+      xmlPieces.push('    <WeightUnits>Ounces</WeightUnits>');
+      xmlPieces.push('    <Dimensions>');
+      xmlPieces.push(`      <Length>${escapeXml(packageLength.toFixed(2))}</Length>`);
+      xmlPieces.push(`      <Width>${escapeXml(packageWidth.toFixed(2))}</Width>`);
+      xmlPieces.push(`      <Height>${escapeXml(packageHeight.toFixed(2))}</Height>`);
+      xmlPieces.push('      <Units>Inches</Units>');
+      xmlPieces.push('    </Dimensions>');
 
       xmlPieces.push('    <Customer>');
       xmlPieces.push(`      <CustomerCode>${escapeXml(o.customerCode || o.billTo?.email || o.shipTo?.email || o.orderNumber || o._id || '')}</CustomerCode>`);
