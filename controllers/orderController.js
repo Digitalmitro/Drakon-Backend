@@ -7,6 +7,14 @@ const { create } = require("xmlbuilder2");                // for building export
 const { XMLParser } = require("fast-xml-parser");            // for parsing ShipNotice XML
 const axios = require("axios");
 const { mapCartItemsToOrderItems, normalizeWeightUnits } = require("../utils/orderItemMapper");
+const shipstationService = require("../services/shipstationService");
+const ProductIdentityMap = require("../models/ProductIdentityMap");
+const {
+  enforceCanonicalOrderItems,
+  normalizeUpc,
+  canonicalSkuFromUpc,
+  safeString,
+} = require("../utils/canonicalIdentity");
 
 const SHIPSTATION_V1_API_URL = "https://ssapi.shipstation.com";
 
@@ -47,20 +55,24 @@ function resolveOrderShippingMethod(payloadShippingMethod, cartItems) {
 }
 
 function normalizeShipstationConfig(config = {}) {
+  const defaultCarrierCode = String(process.env.SHIPSTATION_DEFAULT_CARRIER_CODE || "stamps_com").trim();
+  const defaultPackageCode = String(process.env.SHIPSTATION_DEFAULT_PACKAGE_CODE || "package").trim();
+  const defaultConfirmation = String(process.env.SHIPSTATION_DEFAULT_CONFIRMATION || "none").trim();
+
   if (!config || typeof config !== "object") {
     return {
-      carrierCode: "",
+      carrierCode: defaultCarrierCode,
       serviceCode: "",
-      packageCode: "",
-      confirmation: "",
+      packageCode: defaultPackageCode,
+      confirmation: defaultConfirmation,
     };
   }
 
   return {
-    carrierCode: config.carrierCode ? String(config.carrierCode).trim() : "",
+    carrierCode: config.carrierCode ? String(config.carrierCode).trim() : defaultCarrierCode,
     serviceCode: config.serviceCode ? String(config.serviceCode).trim() : "",
-    packageCode: config.packageCode ? String(config.packageCode).trim() : "",
-    confirmation: config.confirmation ? String(config.confirmation).trim() : "",
+    packageCode: config.packageCode ? String(config.packageCode).trim() : defaultPackageCode,
+    confirmation: config.confirmation ? String(config.confirmation).trim() : defaultConfirmation,
   };
 }
 
@@ -133,7 +145,7 @@ function parseShipstationConfigFromOrder(order = {}) {
   };
 }
 
-function buildShipstationOrderPayload(order = {}) {
+async function buildShipstationOrderPayload(order = {}) {
   const cfg = parseShipstationConfigFromOrder(order);
   const useDirectServiceCodes = String(process.env.SHIPSTATION_USE_DIRECT_SERVICE_CODES || "true").toLowerCase() !== "false";
   const rawShippingMethod = order.shippingMethod ? String(order.shippingMethod).trim() : "";
@@ -147,10 +159,53 @@ function buildShipstationOrderPayload(order = {}) {
     height: toNumber(process.env.SHIPSTATION_DEFAULT_PACKAGE_HEIGHT, 4),
   };
 
-  const items = (Array.isArray(order.items) ? order.items : []).map((item, index) => ({
+  const orderItems = Array.isArray(order.items) ? order.items : [];
+  const upcs = [...new Set(orderItems.map((item) => normalizeUpc(item?.upc)).filter(Boolean))];
+  const identityByUpc = new Map();
+  const shipstationByUpc = new Map();
+
+  if (upcs.length > 0) {
+    const identities = await ProductIdentityMap.find(
+      { upcNormalized: { $in: upcs } },
+      { upcNormalized: 1, canonicalName: 1, metadata: 1 }
+    ).lean();
+
+    for (const identity of identities) {
+      identityByUpc.set(identity.upcNormalized, identity);
+    }
+
+    await Promise.all(
+      upcs.map(async (upc) => {
+        try {
+          const product = await shipstationService.getBestProductByUPC(upc);
+          if (product) shipstationByUpc.set(upc, product);
+        } catch (_) {
+          // no-op: keep identity fallback path
+        }
+      })
+    );
+  }
+
+  const items = orderItems.map((item, index) => {
+    const normalizedUpc = normalizeUpc(item?.upc);
+    const identity = identityByUpc.get(normalizedUpc);
+    const shipstationProduct = shipstationByUpc.get(normalizedUpc);
+    const preferredShipstationSku = safeString(identity?.metadata?.shipstationSku)
+      || safeString(identity?.metadata?.xlsxProductInfo)
+      || safeString(identity?.metadata?.preferredShipstationSku);
+    const canonicalSku = canonicalSkuFromUpc(normalizedUpc) || safeString(item?.sku);
+    const shipstationSku = safeString(shipstationProduct?.sku)
+      || preferredShipstationSku
+      || canonicalSku;
+    const shipstationName = safeString(identity?.canonicalName)
+      || safeString(identity?.metadata?.shipstationProductName)
+      || safeString(shipstationProduct?.name || shipstationProduct?.productName)
+      || item.name;
+
+    return {
     lineItemKey: `${order.orderNumber || order._id}-${index + 1}`,
-    sku: item.sku || item.upc || `item-${index + 1}`,
-    name: item.name || `Item ${index + 1}`,
+    sku: shipstationSku,
+    name: shipstationName || `UPC ${normalizedUpc || index + 1}`,
     imageUrl: "",
     weight: {
       value: Math.max(0, convertWeightToPounds(item.weight, item.weightUnits)),
@@ -162,12 +217,13 @@ function buildShipstationOrderPayload(order = {}) {
     shippingAmount: 0,
     warehouseLocation: item.location || "",
     options: [],
-    fulfillmentSku: item.sku || item.upc || "",
+    fulfillmentSku: shipstationSku,
     adjustment: false,
-    upc: item.upc || "",
+    upc: normalizedUpc,
     createDate: new Date(order.orderDate || Date.now()).toISOString(),
     modifyDate: new Date(order.lastModified || order.orderDate || Date.now()).toISOString(),
-  }));
+  };
+  });
 
   const payload = {
     orderNumber: order.orderNumber,
@@ -225,7 +281,7 @@ async function pushOrderToShipstation(order) {
   }
 
   try {
-    const payload = buildShipstationOrderPayload(order);
+    const payload = await buildShipstationOrderPayload(order);
     const response = await axios.post(
       `${SHIPSTATION_V1_API_URL}/orders/createorder`,
       payload,
@@ -248,7 +304,7 @@ async function pushOrderToShipstation(order) {
       orderKey: response.data?.orderKey || null,
     };
   } catch (error) {
-    const payload = buildShipstationOrderPayload(order);
+    const payload = await buildShipstationOrderPayload(order);
     const responseBody = error.response?.data;
     const responseBodyText = typeof responseBody === "string"
       ? responseBody
@@ -373,7 +429,33 @@ exports.createOrder = async (req, res) => {
     //    (same for both user‐cart and guest‐cart)
 
 
-    const itemsForOrder = mapCartItemsToOrderItems(cartItems);
+    const mappedItems = mapCartItemsToOrderItems(cartItems);
+    const { canonicalItems: itemsForOrder, quarantined } = await enforceCanonicalOrderItems(mappedItems, {
+      orderNumber,
+      source: "order_create",
+    });
+
+    if (quarantined.length > 0) {
+      return res.status(422).json({
+        message: "Order contains quarantined items with missing/unknown UPC. Resolve UPC mapping before retry.",
+        quarantinedItems: quarantined.map((entry) => ({
+          id: entry._id,
+          reason: entry.reason,
+          upcRaw: entry.upcRaw,
+          upcNormalized: entry.upcNormalized,
+          skuRaw: entry.skuRaw,
+          productName: entry.productName,
+          size: entry.size,
+          quantity: entry.quantity,
+        })),
+      });
+    }
+
+    if (!itemsForOrder.length) {
+      return res.status(422).json({
+        message: "No valid order items available after canonical UPC enforcement.",
+      });
+    }
 
     // 5) Construct the new Order document
     const resolvedShippingMethod = resolveOrderShippingMethod(shippingMethod, cartItems);

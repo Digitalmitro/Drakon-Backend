@@ -1,8 +1,10 @@
 const shipstationService = require('../services/shipstationService');
 const { ProductsModal } = require('../models/AdminModel/ProductModel');
 const Order = require('../models/Order');
+const ProductIdentityMap = require('../models/ProductIdentityMap');
 const { XMLParser } = require('fast-xml-parser');
 const { normalizeWeightUnits } = require('../utils/orderItemMapper');
+const { syncShipstationCatalogFromAdmin } = require('../utils/syncShipstationCatalogFromAdmin');
 
 // Helper to escape XML special characters
 function escapeXml(unsafe) {
@@ -138,6 +140,10 @@ function withSizeInName(name = '', size = '') {
   if (base.toLowerCase().endsWith(normalizedSize.toLowerCase())) return base;
   return `${base} ${normalizedSize}`.trim();
 }
+
+function normalizeUpc(value) {
+  return String(value || '').replace(/\D/g, '').trim();
+}
 // GET /api/shipstation/orders
 async function getOrdersForShipstation(req, res) {
   try {
@@ -145,6 +151,45 @@ async function getOrdersForShipstation(req, res) {
 
     // Fetch real orders from DB (no test fallback)
     const orders = await Order.find().lean();
+
+    const allUpcs = [...new Set(
+      orders
+        .flatMap((order) => (Array.isArray(order.items) ? order.items : []))
+        .map((item) => normalizeUpc(item?.upc))
+        .filter(Boolean)
+    )];
+
+    const identityByUpc = new Map();
+    if (allUpcs.length > 0) {
+      const identities = await ProductIdentityMap.find(
+        { upcNormalized: { $in: allUpcs } },
+        { upcNormalized: 1, canonicalName: 1, metadata: 1 }
+      ).lean();
+
+      for (const identity of identities) {
+        identityByUpc.set(identity.upcNormalized, identity);
+      }
+    }
+
+    const shipstationByUpc = new Map();
+    try {
+      const allShipstationProducts = await shipstationService.getAllProducts({ pageSize: 500 });
+      const groupedByUpc = new Map();
+
+      for (const product of allShipstationProducts) {
+        const upc = normalizeUpc(product?.upc);
+        if (!upc) continue;
+        if (!groupedByUpc.has(upc)) groupedByUpc.set(upc, []);
+        groupedByUpc.get(upc).push(product);
+      }
+
+      for (const [upc, products] of groupedByUpc.entries()) {
+        const best = shipstationService.pickBestProduct(products);
+        if (best) shipstationByUpc.set(upc, best);
+      }
+    } catch (catalogError) {
+      console.error('ShipStation catalog resolution warning:', catalogError.message || catalogError);
+    }
 
     // Build XML
     const xmlPieces = [];
@@ -241,8 +286,25 @@ async function getOrdersForShipstation(req, res) {
         const size = getItemSize(it);
         const baseName = it.name || '';
         const computedName = withSizeInName(baseName, size);
-        const sku = it.sku || it.SKU || computedName || '';
-        const upc = it.upc || it.UPC || '';
+        const upc = normalizeUpc(it.upc || it.UPC || '');
+        const identity = identityByUpc.get(upc);
+        const shipstationProduct = shipstationByUpc.get(upc);
+        const mappedSku = String(
+          shipstationProduct?.sku
+          || identity?.metadata?.shipstationSku
+          || identity?.metadata?.xlsxProductInfo
+          || identity?.metadata?.preferredShipstationSku
+          || ''
+        ).trim();
+        const sku = mappedSku || it.sku || it.SKU || computedName || upc || '';
+        const mappedName = String(
+          shipstationProduct?.name
+          || shipstationProduct?.productName
+          || identity?.metadata?.shipstationProductName
+          || identity?.canonicalName
+          || ''
+        ).trim();
+        const exportName = mappedName || computedName;
         const itemOptions = [];
         if (size) itemOptions.push({ name: 'Size', value: size });
         if (upc) itemOptions.push({ name: 'UPC', value: upc });
@@ -253,7 +315,7 @@ async function getOrdersForShipstation(req, res) {
 
         xmlPieces.push('      <Item>');
         xmlPieces.push(`        <SKU>${escapeXml(sku)}</SKU>`);
-        xmlPieces.push(`        <Name>${escapeXml(computedName)}</Name>`);
+        xmlPieces.push(`        <Name>${escapeXml(exportName)}</Name>`);
         xmlPieces.push(`        <Quantity>${escapeXml(quantity)}</Quantity>`);
         xmlPieces.push(`        <UnitPrice>${escapeXml(Number(unit).toFixed(2))}</UnitPrice>`);
         xmlPieces.push(`        <Weight>${escapeXml(weightValue.toFixed(2))}</Weight>`);
@@ -372,10 +434,30 @@ async function getAllProducts(req, res) {
   }
 }
 
+async function syncProductsFromAdmin(req, res) {
+  try {
+    const dryRun = req.body?.dryRun !== false;
+    const deleteMissing = req.body?.deleteMissing !== false;
+    const limit = Number.isFinite(Number(req.body?.limit)) ? Number(req.body.limit) : null;
+
+    const result = await syncShipstationCatalogFromAdmin({
+      dryRun,
+      deleteMissing,
+      limit,
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Controller syncProductsFromAdmin error:', error.response?.data || error.message || error);
+    return res.status(500).json({ error: error.response?.data || error.message || 'Failed to sync ShipStation products from admin catalog' });
+  }
+}
+
 module.exports = {
   getProductByUPC,
   getShippingRates,
   getAllProducts,
+  syncProductsFromAdmin,
   getOrdersForShipstation,
   shipNotify,
 };

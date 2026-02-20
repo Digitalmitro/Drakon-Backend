@@ -4,11 +4,22 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test test",
     "start": "node index.js",
     "dev": "nodemon index.js",
     "migrate:orders-upc": "node utils/backfillOrderItemsUpc.js",
-    "migrate:orders-upc:apply": "node utils/backfillOrderItemsUpc.js --apply"
+    "migrate:orders-upc:apply": "node utils/backfillOrderItemsUpc.js --apply",
+    "reconcile:identity": "node utils/reconcileCanonicalIdentity.js",
+    "reconcile:identity:apply": "node utils/reconcileCanonicalIdentity.js --apply",
+    "repair:orders:canonical": "node utils/repairOrdersCanonical.js",
+    "repair:orders:canonical:apply": "node utils/repairOrdersCanonical.js --apply",
+    "sync:shipstation:mappings": "node utils/syncShipstationCatalogMappings.js",
+    "sync:shipstation:orders": "node utils/shipstationBulkUpdatePrintConfig.js",
+    "sync:shipstation:products": "node utils/backfillShipstationProductDefaults.js",
+    "sync:shipstation:catalog:strict": "node utils/syncShipstationCatalogFromAdmin.js",
+    "sync:shipstation:catalog:strict:apply": "node utils/syncShipstationCatalogFromAdmin.js --apply",
+    "sync:admin:workbook": "node utils/syncAdminProductsFromWorkbook.js",
+    "sync:admin:workbook:apply": "node utils/syncAdminProductsFromWorkbook.js --apply"
   },
   "keywords": [],
   "author": "",
@@ -33,6 +44,7 @@
     "request": "^2.88.2",
     "stripe": "^17.7.0",
     "twilio": "^5.0.4",
+    "xlsx": "^0.18.5",
     "xmlbuilder2": "^3.1.1"
   }
 }

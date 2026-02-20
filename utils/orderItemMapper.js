@@ -20,6 +20,10 @@ function safeString(value) {
   return String(value).trim();
 }
 
+function normalizeUpc(value) {
+  return safeString(value).replace(/\D/g, "");
+}
+
 function isLikelyMongoObjectId(value) {
   return /^[a-fA-F0-9]{24}$/.test(safeString(value));
 }
@@ -77,26 +81,23 @@ function resolveSku(cartItem = {}, product = {}, resolvedSize = "", fallbackName
 
   if (product.sku) return String(product.sku);
 
-  const skuFromName = appendSizeToName(fallbackName, resolvedSize);
-  if (skuFromName) return skuFromName;
-
   return "";
 }
 
 function resolveUpc(cartItem = {}, resolvedSize = "") {
-  if (cartItem.upc) return String(cartItem.upc);
+  if (cartItem.upc) return normalizeUpc(cartItem.upc);
 
   const product = cartItem.productId || {};
   if (Array.isArray(product.size) && resolvedSize) {
     const sizeEntry = product.size.find((entry) => safeString(entry?.size) === safeString(resolvedSize));
-    if (sizeEntry?.upc) return String(sizeEntry.upc);
+    if (sizeEntry?.upc) return normalizeUpc(sizeEntry.upc);
   }
 
-  if (product.upc) return String(product.upc);
+  if (product.upc) return normalizeUpc(product.upc);
 
   if (Array.isArray(product.size)) {
     const firstUpc = product.size.find((entry) => entry?.upc)?.upc;
-    if (firstUpc) return String(firstUpc);
+    if (firstUpc) return normalizeUpc(firstUpc);
   }
 
   return "";
@@ -144,7 +145,7 @@ function mapCartItemsToOrderItems(cartItems = []) {
       : appendSizeToName(baseName, size) || `Product ${idx + 1}`;
 
     return {
-      sku: normalizedSku || upc || appendSizeToName(baseName, size) || `item-${idx + 1}`,
+      sku: upc || normalizedSku,
       upc,
       name,
       size,

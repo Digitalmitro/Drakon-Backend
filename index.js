@@ -456,12 +456,8 @@ server.get("/products", async (req, res) => {
     const { category } = req.query;
     const limit = parseInt(req.query.limit) || 10;
 
-    if (!category) {
-      return res.status(401).json({ message: "not provide category" });
-    }
-    const products = await FeaturedpoductModal.find({
-      category: category,
-    }).limit(limit);
+    const query = category ? { category } : {};
+    const products = await FeaturedpoductModal.find(query).limit(limit);
 
     if (!products.length) {
       return res
@@ -1999,23 +1995,80 @@ server.post("/shipping/estimate-v2", async (req, res) => {
 
   try {
     const shipstationService = require('./services/shipstationService');
+    const {
+      normalizeUpc,
+      ensureIdentityForUpc,
+      quarantineItem,
+    } = require('./utils/canonicalIdentity');
     
     // Get shipping rates for each item individually
     const itemShippingOptions = await Promise.all(
       items.map(async (item) => {
         try {
+          const upcNormalized = normalizeUpc(item?.upc);
+          if (!upcNormalized) {
+            const quarantine = await quarantineItem({
+              item,
+              reason: 'MISSING_OR_INVALID_UPC',
+              source: 'shipping_estimate_v2',
+              metadata: { endpoint: '/shipping/estimate-v2' },
+            });
+
+            return {
+              upc: item?.upc || '',
+              quantity: item?.quantity || 1,
+              shippingOptions: [],
+              defaultOption: null,
+              quarantined: true,
+              quarantineId: quarantine._id,
+              error: 'Missing or invalid UPC. Item quarantined.',
+            };
+          }
+
+          const identity = await ensureIdentityForUpc(upcNormalized);
+          if (!identity) {
+            const quarantine = await quarantineItem({
+              item: { ...item, upc: upcNormalized },
+              reason: 'UNKNOWN_UPC',
+              source: 'shipping_estimate_v2',
+              metadata: { endpoint: '/shipping/estimate-v2', upcNormalized },
+            });
+
+            return {
+              upc: upcNormalized,
+              quantity: item?.quantity || 1,
+              shippingOptions: [],
+              defaultOption: null,
+              quarantined: true,
+              quarantineId: quarantine._id,
+              error: 'Unknown UPC. Item quarantined until mapping is available.',
+            };
+          }
+
           // Fetch product details from ShipStation using UPC
           let productInfo;
           try {
-            productInfo = await shipstationService.getProductByUPC(item.upc);
+            productInfo = await shipstationService.getProductByUPC(upcNormalized);
           } catch (error) {
-            console.log(`Product not found in ShipStation for UPC ${item.upc}, using defaults`);
-            // Use default dimensions if product not found in ShipStation
-            productInfo = {
-              weightOz: 10,
-              length: 10,
-              width: 8,
-              height: 4
+            const quarantine = await quarantineItem({
+              item: { ...item, upc: upcNormalized },
+              reason: 'UPC_NOT_IN_SHIPSTATION',
+              source: 'shipping_estimate_v2',
+              metadata: {
+                endpoint: '/shipping/estimate-v2',
+                upcNormalized,
+                message: error.message,
+              },
+            });
+
+            return {
+              upc: upcNormalized,
+              quantity: item?.quantity || 1,
+              shippingOptions: [],
+              defaultOption: null,
+              quarantined: true,
+              quarantineId: quarantine._id,
+              error: 'UPC is not configured in ShipStation product catalog.',
             };
           }
 
@@ -2055,7 +2108,7 @@ server.post("/shipping/estimate-v2", async (req, res) => {
           }));
 
           return {
-            upc: item.upc,
+            upc: upcNormalized,
             quantity: item.quantity,
             shippingOptions: formattedRates,
             // Default to cheapest option
@@ -2063,16 +2116,12 @@ server.post("/shipping/estimate-v2", async (req, res) => {
           };
         } catch (itemError) {
           console.error(`Error getting rates for UPC ${item.upc}:`, itemError.message);
-          // Return fallback for this item
+          // Return explicit error (no fallback rates for unknown identity paths)
           return {
             upc: item.upc,
             quantity: item.quantity,
-            shippingOptions: [{
-              serviceName: 'Standard Shipping',
-              serviceCode: 'standard',
-              cost: 6.99
-            }],
-            defaultOption: 'standard',
+            shippingOptions: [],
+            defaultOption: null,
             error: itemError.message
           };
         }
